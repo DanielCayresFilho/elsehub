@@ -20,10 +20,24 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authService.login(credentials)
       user.value = response.user
-      wsService.connect()
+      
+      // Verify storage
+      const storedToken = localStorage.getItem('accessToken')
+      const storedUser = localStorage.getItem('user')
+      
+      if (!storedToken || !storedUser) {
+        throw new Error('Falha ao salvar credenciais')
+      }
+      
+      // Connect WebSocket after verified
+      setTimeout(() => {
+        wsService.connect()
+      }, 500)
+      
       return response
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Erro ao fazer login'
+      localStorage.clear()
       throw err
     } finally {
       loading.value = false

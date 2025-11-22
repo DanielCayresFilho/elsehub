@@ -29,53 +29,91 @@ class ApiService {
     )
 
     // Response interceptor - Handle errors
+    let isRefreshing = false
+    let failedQueue: any[] = []
+
+    const processQueue = (error: any, token: string | null = null) => {
+      failedQueue.forEach(prom => {
+        if (error) {
+          prom.reject(error)
+        } else {
+          prom.resolve(token)
+        }
+      })
+      failedQueue = []
+    }
+
     this.api.interceptors.response.use(
       (response) => response,
       async (error: AxiosError<ApiError>) => {
-        const originalRequest = error.config
+        const originalRequest: any = error.config
         
-        if (error.response?.status === 401 && originalRequest && !originalRequest.url?.includes('/auth/refresh')) {
+        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+          if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh')) {
+            return Promise.reject(error)
+          }
+
+          if (isRefreshing) {
+            return new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject })
+            }).then(token => {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              return this.api.request(originalRequest)
+            }).catch(err => {
+              return Promise.reject(err)
+            })
+          }
+
+          originalRequest._retry = true
+          isRefreshing = true
+
           const refreshToken = localStorage.getItem('refreshToken')
           
-          if (refreshToken) {
-            try {
-              const response = await axios.post(
-                `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-                { refreshToken }
-              )
-              
-              const { accessToken } = response.data
-              localStorage.setItem('accessToken', accessToken)
-              
-              // Retry original request with new token
-              originalRequest.headers.Authorization = `Bearer ${accessToken}`
-              return this.api.request(originalRequest)
-            } catch (refreshError) {
-              // Refresh failed, clear everything and redirect
-              console.error('Token refresh failed:', refreshError)
-              localStorage.removeItem('accessToken')
-              localStorage.removeItem('refreshToken')
-              localStorage.removeItem('user')
-              
-              if (window.location.pathname !== '/login') {
-                window.location.href = '/login'
-              }
-            }
-          } else {
-            // No refresh token available
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-            localStorage.removeItem('user')
+          if (!refreshToken) {
+            isRefreshing = false
+            this.clearAuthAndRedirect()
+            return Promise.reject(error)
+          }
+
+          try {
+            const response = await axios.post(
+              `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
+              { refreshToken },
+              { timeout: 10000 }
+            )
             
-            if (window.location.pathname !== '/login') {
-              window.location.href = '/login'
-            }
+            const { accessToken } = response.data
+            localStorage.setItem('accessToken', accessToken)
+            
+            this.api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`
+            
+            processQueue(null, accessToken)
+            isRefreshing = false
+            
+            return this.api.request(originalRequest)
+          } catch (refreshError) {
+            processQueue(refreshError, null)
+            isRefreshing = false
+            this.clearAuthAndRedirect()
+            return Promise.reject(refreshError)
           }
         }
         
         return Promise.reject(error)
       }
     )
+  }
+
+  private clearAuthAndRedirect() {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('user')
+    
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login'
+    }
+  }
   }
 
   public getClient(): AxiosInstance {

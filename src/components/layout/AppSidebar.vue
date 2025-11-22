@@ -8,7 +8,7 @@
         </div>
         <div v-if="!isCollapsed" class="logo-text">
           <h1>ElseHub</h1>
-          <p>Workspace</p>
+          <p>Workstation</p>
         </div>
       </div>
     </div>
@@ -205,16 +205,22 @@ const logout = () => {
 }
 
 .logo-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  width: 3rem;
+  height: 3rem;
+  background: white;
+  border: 2px solid #000;
   border-radius: $radius-lg;
   @include flex-center;
   flex-shrink: 0;
 
+  .dark & {
+    background: white;
+    border-color: #333;
+  }
+
   img {
-    width: 100%;
-    height: 100%;
+    width: 80%;
+    height: 80%;
     object-fit: contain;
   }
 }

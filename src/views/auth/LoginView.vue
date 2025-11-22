@@ -8,7 +8,7 @@
             <img src="/logo.png" alt="ElseHub" />
           </div>
           <h1>ElseHub</h1>
-          <p>Plataforma de Atendimento WhatsApp</p>
+          <p>Workstation de Atendimento</p>
         </div>
 
         <!-- Form -->
@@ -81,16 +81,12 @@ const handleLogin = async () => {
   try {
     const response = await authStore.login(form.value)
     
-    // Verify tokens were saved
-    if (response.accessToken && response.user) {
-      // Connect WebSocket
-      wsService.connect()
+    if (response && response.accessToken && response.user) {
+      // Wait a bit to ensure everything is properly saved
+      await new Promise(resolve => setTimeout(resolve, 200))
       
-      // Small delay to ensure everything is saved
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // Redirect to dashboard
-      await router.push('/')
+      // Force reload to clear any stale state
+      window.location.href = '/'
     } else {
       error.value = 'Erro ao processar login. Tente novamente.'
     }
@@ -147,16 +143,22 @@ const handleLogin = async () => {
   margin-bottom: $spacing-xl;
 
   .logo-icon {
-    width: 4rem;
-    height: 4rem;
+    width: 6rem;
+    height: 6rem;
     margin: 0 auto $spacing-md;
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    background: white;
+    border: 3px solid #000;
     border-radius: $radius-xl;
     @include flex-center;
 
+    .dark & {
+      background: white;
+      border-color: #333;
+    }
+
     img {
-      width: 80%;
-      height: 80%;
+      width: 75%;
+      height: 75%;
       object-fit: contain;
     }
   }
