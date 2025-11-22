@@ -14,6 +14,14 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Build arguments for Vite environment variables
+ARG VITE_API_BASE_URL=https://api.elsehub.covenos.com.br/api
+ARG VITE_WS_URL=wss://api.elsehub.covenos.com.br
+
+# Set environment variables for build
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
 # Build application
 RUN npm run build
 

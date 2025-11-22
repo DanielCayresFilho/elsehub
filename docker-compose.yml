@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api.elsehub.covenos.com.br/api}
+        - VITE_WS_URL=${VITE_WS_URL:-wss://api.elsehub.covenos.com.br}
     container_name: elsehub-frontend
     ports:
       - "5173:5173"

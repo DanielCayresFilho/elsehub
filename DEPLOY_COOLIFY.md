@@ -22,13 +22,20 @@
 
 ### 3. Variáveis de Ambiente
 
-Configure as seguintes variáveis no Coolify:
+⚠️ **IMPORTANTE**: No Coolify, configure estas variáveis como **Build Variables** (não Runtime Variables):
 
+**Build Variables** (Clique em "Edit Build Variables"):
 ```env
 VITE_API_BASE_URL=https://api.elsehub.covenos.com.br/api
 VITE_WS_URL=wss://api.elsehub.covenos.com.br
+```
+
+**Runtime Variables** (opcional):
+```env
 NODE_ENV=production
 ```
+
+> **Por quê?** As variáveis `VITE_*` são incorporadas no código durante o build, então precisam estar disponíveis como Build Variables no Coolify.
 
 ### 4. Configuração de Rede
 
@@ -84,6 +91,20 @@ Após o deploy, verifique:
 5. **Rotas funcionam**: Navegue entre diferentes páginas
 
 ## 🐛 Troubleshooting
+
+### Problema: Build falha com "exit code: 1" no npm run build
+
+**Causa:** Variáveis de ambiente do Vite não configuradas corretamente.
+
+**Solução:**
+1. No Coolify, vá em **"Edit Build Variables"**
+2. Adicione as variáveis:
+   ```
+   VITE_API_BASE_URL=https://api.elsehub.covenos.com.br/api
+   VITE_WS_URL=wss://api.elsehub.covenos.com.br
+   ```
+3. **Importante:** Use "Build Variables", NÃO "Environment Variables"
+4. Faça um novo deploy
 
 ### Problema: Frontend não carrega
 
