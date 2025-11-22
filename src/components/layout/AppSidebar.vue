@@ -45,27 +45,27 @@
       <div class="nav-section">
         <h3 v-if="!isCollapsed" class="nav-section-title">Campanhas</h3>
         <ul class="nav-list">
-          <li v-if="!isOperator">
-            <router-link to="/campanhas/nova" class="nav-link">
-              <i class="fas fa-bullhorn"></i>
-              <span v-if="!isCollapsed">Nova Campanha</span>
-            </router-link>
-          </li>
           <li>
-            <router-link to="/campanhas" class="nav-link">
-              <i class="fas fa-list-alt"></i>
+            <router-link to="/campanhas" class="nav-link" exact>
+              <i class="fas fa-megaphone"></i>
               <span v-if="!isCollapsed">Campanhas</span>
             </router-link>
           </li>
           <li v-if="!isOperator">
+            <router-link to="/campanhas/nova" class="nav-link">
+              <i class="fas fa-circle-plus"></i>
+              <span v-if="!isCollapsed">Nova Campanha</span>
+            </router-link>
+          </li>
+          <li v-if="!isOperator">
             <router-link to="/relatorios" class="nav-link">
-              <i class="fas fa-chart-bar"></i>
+              <i class="fas fa-chart-column"></i>
               <span v-if="!isCollapsed">Relatórios</span>
             </router-link>
           </li>
           <li>
             <router-link to="/templates" class="nav-link">
-              <i class="fas fa-file-alt"></i>
+              <i class="fas fa-file-lines"></i>
               <span v-if="!isCollapsed">Templates</span>
             </router-link>
           </li>
@@ -78,25 +78,25 @@
         <ul class="nav-list">
           <li>
             <router-link to="/configuracoes" class="nav-link">
-              <i class="fas fa-cog"></i>
+              <i class="fas fa-gear"></i>
               <span v-if="!isCollapsed">Configurações</span>
             </router-link>
           </li>
           <li v-if="isAdmin">
             <router-link to="/usuarios" class="nav-link">
-              <i class="fas fa-user-friends"></i>
+              <i class="fas fa-user-group"></i>
               <span v-if="!isCollapsed">Usuários</span>
             </router-link>
           </li>
           <li v-if="isAdmin">
             <router-link to="/instancias" class="nav-link">
-              <i class="fas fa-plug"></i>
+              <i class="fas fa-microchip"></i>
               <span v-if="!isCollapsed">Instâncias</span>
             </router-link>
           </li>
           <li v-if="!isOperator">
             <router-link to="/tabulacoes" class="nav-link">
-              <i class="fas fa-tags"></i>
+              <i class="fas fa-bookmark"></i>
               <span v-if="!isCollapsed">Tabulações</span>
             </router-link>
           </li>
@@ -310,13 +310,32 @@ const logout = () => {
     color: $primary-light;
   }
 
-  &.router-link-active {
+  &.router-link-active,
+  &.router-link-exact-active {
     background: rgba($primary-light, 0.1);
     color: $primary-light;
-    font-weight: 500;
+    font-weight: 600;
 
     .dark & {
       background: rgba($primary-light, 0.2);
+    }
+  }
+
+  &:not(.router-link-exact-active)[href*="/campanhas/nova"] {
+    &.router-link-active {
+      background: transparent;
+      color: $text-primary-light;
+      font-weight: 400;
+
+      .dark & {
+        color: $text-primary-dark;
+        background: transparent;
+      }
+
+      &:hover {
+        background: rgba($primary-light, 0.1);
+        color: $primary-light;
+      }
     }
   }
 

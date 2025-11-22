@@ -39,7 +39,7 @@ NODE_ENV=production
 
 ### 4. Configuração de Rede
 
-- **Port**: `5173`
+- **Port**: `git `
 - **Protocol**: HTTP
 - **Public**: Sim (se desejar acesso público)
 

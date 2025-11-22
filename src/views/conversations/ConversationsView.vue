@@ -20,9 +20,9 @@
 
       <div v-if="loading" class="loading"></div>
 
-      <div v-else-if="filteredConversations.length === 0" class="empty-state">
+      <div v-else-if="filteredConversations.length === 0" class="empty-state-sidebar">
         <i class="fas fa-comments"></i>
-        <p>Nenhuma conversa ativa</p>
+        <p>Nenhuma conversa</p>
       </div>
 
       <div v-else class="conversations-list">
@@ -385,6 +385,28 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   @include custom-scrollbar;
+}
+
+.empty-state-sidebar {
+  @include flex-center;
+  flex-direction: column;
+  padding: $spacing-2xl $spacing-md;
+  color: $text-secondary-light;
+  text-align: center;
+
+  .dark & {
+    color: $text-secondary-dark;
+  }
+
+  i {
+    font-size: 2.5rem;
+    margin-bottom: $spacing-md;
+    opacity: 0.3;
+  }
+
+  p {
+    font-size: 0.875rem;
+  }
 }
 
 .conversation-item {

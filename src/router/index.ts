@@ -35,26 +35,21 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/campanhas',
-    children: [
-      {
-        path: '',
-        name: 'Campaigns',
-        component: () => import('@/views/campaigns/CampaignsListView.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'nova',
-        name: 'NewCampaign',
-        component: () => import('@/views/campaigns/NewCampaignView.vue'),
-        meta: { requiresAuth: true, roles: [UserRole.ADMIN, UserRole.SUPERVISOR] }
-      },
-      {
-        path: ':id',
-        name: 'CampaignDetails',
-        component: () => import('@/views/campaigns/CampaignDetailsView.vue'),
-        meta: { requiresAuth: true }
-      }
-    ]
+    name: 'Campaigns',
+    component: () => import('@/views/campaigns/CampaignsListView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/campanhas/nova',
+    name: 'NewCampaign',
+    component: () => import('@/views/campaigns/NewCampaignView.vue'),
+    meta: { requiresAuth: true, roles: [UserRole.ADMIN, UserRole.SUPERVISOR] }
+  },
+  {
+    path: '/campanhas/:id',
+    name: 'CampaignDetails',
+    component: () => import('@/views/campaigns/CampaignDetailsView.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/relatorios',

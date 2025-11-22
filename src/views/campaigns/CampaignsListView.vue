@@ -99,9 +99,10 @@ const loadCampaigns = async () => {
   loading.value = true
   try {
     const response = await campaignService.getCampaigns(1, 50)
-    campaigns.value = response.data
+    campaigns.value = response.data || []
   } catch (error) {
     console.error('Erro ao carregar campanhas:', error)
+    campaigns.value = []
   } finally {
     loading.value = false
   }
