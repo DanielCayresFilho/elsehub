@@ -1,0 +1,328 @@
+@import 'variables';
+@import 'mixins';
+
+// Reset & Base Styles
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  
+  @include mobile {
+    font-size: 14px;
+  }
+}
+
+body {
+  font-family: $font-family-sans;
+  line-height: 1.5;
+  color: $text-primary-light;
+  background: $surface-light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  &.dark {
+    color: $text-primary-dark;
+    background: $background-dark;
+  }
+}
+
+// Scrollbar
+body, .scrollable {
+  @include custom-scrollbar;
+}
+
+// Transitions
+.theme-transition {
+  transition: background-color $transition-normal,
+              color $transition-normal,
+              border-color $transition-normal;
+}
+
+// Typography
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.125rem; }
+h5 { font-size: 1rem; }
+h6 { font-size: 0.875rem; }
+
+a {
+  color: $primary-light;
+  text-decoration: none;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+// Buttons
+button {
+  font-family: inherit;
+}
+
+.btn {
+  @include button-base;
+}
+
+.btn-primary {
+  @include button-primary;
+}
+
+.btn-secondary {
+  @include button-secondary;
+}
+
+.btn-success {
+  @include button-base;
+  background: $success;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background: darken($success, 10%);
+  }
+}
+
+.btn-danger {
+  @include button-base;
+  background: $error;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background: darken($error, 10%);
+  }
+}
+
+.btn-sm {
+  padding: $spacing-xs $spacing-sm;
+  font-size: 0.75rem;
+}
+
+.btn-lg {
+  padding: $spacing-md $spacing-lg;
+  font-size: 1rem;
+}
+
+// Inputs
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="search"],
+textarea,
+select {
+  @include input-base;
+}
+
+textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right $spacing-sm center;
+  background-size: 1.5em;
+  padding-right: 2.5rem;
+}
+
+// Forms
+.form-group {
+  margin-bottom: $spacing-md;
+
+  label {
+    display: block;
+    margin-bottom: $spacing-xs;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+
+  .error-message {
+    color: $error;
+    font-size: 0.75rem;
+    margin-top: $spacing-xs;
+  }
+}
+
+// Cards
+.card {
+  @include card;
+}
+
+.card-header {
+  padding: $spacing-md $spacing-lg;
+  border-bottom: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+}
+
+.card-body {
+  padding: $spacing-lg;
+}
+
+// Badges
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $radius-full;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-primary {
+  background: rgba($primary-light, 0.1);
+  color: $primary-light;
+}
+
+.badge-success {
+  background: rgba($success, 0.1);
+  color: $success;
+}
+
+.badge-warning {
+  background: rgba($warning, 0.1);
+  color: $warning;
+}
+
+.badge-error {
+  background: rgba($error, 0.1);
+  color: $error;
+}
+
+// Loading
+.loading {
+  @include flex-center;
+  padding: $spacing-xl;
+  
+  &::after {
+    content: '';
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid $border-light;
+    border-top-color: $primary-light;
+    border-radius: $radius-full;
+    animation: spin 1s linear infinite;
+
+    .dark & {
+      border-color: $border-dark;
+      border-top-color: $primary-light;
+    }
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// Modal
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: $spacing-md;
+}
+
+.modal {
+  background: $background-light;
+  border-radius: $radius-lg;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: $shadow-xl;
+
+  .dark & {
+    background: $surface-dark;
+  }
+}
+
+.modal-header {
+  padding: $spacing-lg;
+  border-bottom: 1px solid $border-light;
+  @include flex-between;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+}
+
+.modal-body {
+  padding: $spacing-lg;
+}
+
+.modal-footer {
+  padding: $spacing-lg;
+  border-top: 1px solid $border-light;
+  @include flex-between;
+  gap: $spacing-sm;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+}
+
+// Utilities
+.text-primary {
+  color: $primary-light !important;
+}
+
+.text-success {
+  color: $success !important;
+}
+
+.text-warning {
+  color: $warning !important;
+}
+
+.text-error {
+  color: $error !important;
+}
+
+.text-secondary {
+  color: $text-secondary-light !important;
+
+  .dark & {
+    color: $text-secondary-dark !important;
+  }
+}
+
+.truncate {
+  @include truncate;
+}
+
+.flex-center {
+  @include flex-center;
+}
+
+.flex-between {
+  @include flex-between;
+}
+

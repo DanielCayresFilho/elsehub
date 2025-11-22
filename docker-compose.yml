@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  elsehub-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: elsehub-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api.elsehub.covenos.com.br/api}
+      - VITE_WS_URL=${VITE_WS_URL:-wss://api.elsehub.covenos.com.br}
+    restart: unless-stopped
+    networks:
+      - elsehub-network
+
+networks:
+  elsehub-network:
+    driver: bridge
+
