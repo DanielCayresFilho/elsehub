@@ -79,14 +79,23 @@ const handleLogin = async () => {
   error.value = null
 
   try {
-    await authStore.login(form.value)
+    const response = await authStore.login(form.value)
     
-    // Connect WebSocket
-    wsService.connect()
-    
-    // Redirect to dashboard
-    router.push('/')
+    // Verify tokens were saved
+    if (response.accessToken && response.user) {
+      // Connect WebSocket
+      wsService.connect()
+      
+      // Small delay to ensure everything is saved
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Redirect to dashboard
+      await router.push('/')
+    } else {
+      error.value = 'Erro ao processar login. Tente novamente.'
+    }
   } catch (err: any) {
+    console.error('Login error:', err)
     const errorMessage = err.response?.data?.message
     if (Array.isArray(errorMessage)) {
       error.value = errorMessage.join(', ')
@@ -105,9 +114,13 @@ const handleLogin = async () => {
 
 .login-view {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: $surface-light;
   @include flex-center;
   padding: $spacing-lg;
+
+  .dark & {
+    background: $background-dark;
+  }
 }
 
 .login-container {
@@ -119,10 +132,13 @@ const handleLogin = async () => {
   background: $background-light;
   border-radius: $radius-xl;
   padding: $spacing-2xl;
-  box-shadow: $shadow-xl;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid $border-light;
 
   .dark & {
     background: $surface-dark;
+    border-color: $border-dark;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   }
 }
 

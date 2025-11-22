@@ -32,38 +32,47 @@ class ApiService {
     this.api.interceptors.response.use(
       (response) => response,
       async (error: AxiosError<ApiError>) => {
-        if (error.response?.status === 401) {
-          // Token expired, try to refresh
+        const originalRequest = error.config
+        
+        if (error.response?.status === 401 && originalRequest && !originalRequest.url?.includes('/auth/refresh')) {
           const refreshToken = localStorage.getItem('refreshToken')
-          if (refreshToken && !error.config?.url?.includes('/auth/refresh')) {
+          
+          if (refreshToken) {
             try {
               const response = await axios.post(
                 `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
                 { refreshToken }
               )
+              
               const { accessToken } = response.data
               localStorage.setItem('accessToken', accessToken)
               
-              // Retry original request
-              if (error.config) {
-                error.config.headers.Authorization = `Bearer ${accessToken}`
-                return this.api.request(error.config)
-              }
-            } catch {
-              // Refresh failed, logout
+              // Retry original request with new token
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`
+              return this.api.request(originalRequest)
+            } catch (refreshError) {
+              // Refresh failed, clear everything and redirect
+              console.error('Token refresh failed:', refreshError)
               localStorage.removeItem('accessToken')
               localStorage.removeItem('refreshToken')
               localStorage.removeItem('user')
-              window.location.href = '/login'
+              
+              if (window.location.pathname !== '/login') {
+                window.location.href = '/login'
+              }
             }
           } else {
-            // No refresh token, logout
+            // No refresh token available
             localStorage.removeItem('accessToken')
             localStorage.removeItem('refreshToken')
             localStorage.removeItem('user')
-            window.location.href = '/login'
+            
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login'
+            }
           }
         }
+        
         return Promise.reject(error)
       }
     )
