@@ -114,7 +114,6 @@ class ApiService {
       window.location.href = '/login'
     }
   }
-  }
 
   public getClient(): AxiosInstance {
     return this.api
