@@ -20,12 +20,29 @@ const themeStore = useThemeStore()
 const requiresAuth = computed(() => route.meta.requiresAuth !== false)
 
 onMounted(() => {
+  console.log('App: Mounted, initializing...')
+  
   // Initialize theme
   themeStore.initTheme()
+  
+  // Check localStorage state
+  const token = localStorage.getItem('accessToken')
+  const refresh = localStorage.getItem('refreshToken')
+  const user = localStorage.getItem('user')
+  
+  console.log('App: LocalStorage state:', {
+    hasToken: !!token,
+    hasRefresh: !!refresh,
+    hasUser: !!user,
+    tokenPreview: token ? token.substring(0, 20) + '...' : 'NONE'
+  })
 
   // Check authentication and connect WebSocket if authenticated
   if (authStore.checkAuth()) {
+    console.log('App: User authenticated, connecting WebSocket')
     wsService.connect()
+  } else {
+    console.log('App: User not authenticated')
   }
 })
 </script>

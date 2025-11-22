@@ -203,16 +203,37 @@ const isOperator = computed(() => authStore.isOperator)
 
 const loadDashboardData = async () => {
   loading.value = true
+  
+  // Verify token before loading
+  const token = localStorage.getItem('accessToken')
+  console.log('Dashboard: Loading data with token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN')
+  
+  if (!token || token === 'undefined') {
+    console.error('Dashboard: No valid token found, redirecting to login')
+    window.location.href = '/login'
+    return
+  }
+  
   try {
+    console.log('Dashboard: Fetching conversations and stats...')
+    
     const [conversationsData, statsData] = await Promise.all([
       conversationService.getConversations(1, 10),
       reportService.getStatistics()
     ])
     
+    console.log('Dashboard: Data loaded successfully')
+    
     recentConversations.value = conversationsData.data
     stats.value = statsData
-  } catch (error) {
-    console.error('Erro ao carregar dashboard:', error)
+  } catch (error: any) {
+    console.error('Dashboard: Error loading data:', error)
+    
+    if (error.response?.status === 401) {
+      console.error('Dashboard: 401 error, clearing auth and redirecting')
+      localStorage.clear()
+      window.location.href = '/login'
+    }
   } finally {
     loading.value = false
   }

@@ -20,12 +20,16 @@ class ApiService {
     this.api.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         const token = localStorage.getItem('accessToken')
-        if (token && config.headers) {
+        if (token && token !== 'undefined' && config.headers) {
           config.headers.Authorization = `Bearer ${token}`
+          console.log('API: Adding token to request:', config.url, token.substring(0, 20) + '...')
         }
         return config
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        console.error('API: Request interceptor error:', error)
+        return Promise.reject(error)
+      }
     )
 
     // Response interceptor - Handle errors

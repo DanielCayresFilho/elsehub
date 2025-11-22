@@ -78,26 +78,51 @@ const handleLogin = async () => {
   loading.value = true
   error.value = null
 
+  console.log('LoginView: Starting login process')
+
   try {
     const response = await authStore.login(form.value)
     
-    if (response && response.accessToken && response.user) {
-      // Wait a bit to ensure everything is properly saved
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      // Force reload to clear any stale state
-      window.location.href = '/'
-    } else {
+    console.log('LoginView: Login response:', response)
+    
+    if (!response) {
+      console.error('LoginView: No response from login')
       error.value = 'Erro ao processar login. Tente novamente.'
+      return
     }
+    
+    if (!response.accessToken || !response.user) {
+      console.error('LoginView: Invalid response structure:', response)
+      error.value = 'Erro ao processar login. Tente novamente.'
+      return
+    }
+    
+    console.log('LoginView: Login successful, redirecting...')
+    
+    // Wait a bit to ensure everything is properly saved
+    await new Promise(resolve => setTimeout(resolve, 300))
+    
+    // Force reload to clear any stale state
+    console.log('LoginView: Redirecting to dashboard')
+    window.location.href = '/'
+    
   } catch (err: any) {
-    console.error('Login error:', err)
-    const errorMessage = err.response?.data?.message
-    if (Array.isArray(errorMessage)) {
-      error.value = errorMessage.join(', ')
-    } else {
-      error.value = errorMessage || 'Erro ao fazer login. Verifique suas credenciais.'
+    console.error('LoginView: Login error:', err)
+    
+    let errorMsg = 'Erro ao fazer login. Verifique suas credenciais.'
+    
+    if (err.response?.data?.message) {
+      const apiMessage = err.response.data.message
+      if (Array.isArray(apiMessage)) {
+        errorMsg = apiMessage.join(', ')
+      } else {
+        errorMsg = apiMessage
+      }
+    } else if (err.message) {
+      errorMsg = err.message
     }
+    
+    error.value = errorMsg
   } finally {
     loading.value = false
   }
