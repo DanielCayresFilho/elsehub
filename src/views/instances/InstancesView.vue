@@ -19,11 +19,18 @@
         <div class="instance-info">
           <p><strong>Provider:</strong> {{ instance.provider }}</p>
           <p><strong>Instância:</strong> {{ instance.credentials.instanceName }}</p>
+          <p><strong>Server:</strong> {{ instance.credentials.serverUrl }}</p>
+          <p><strong>Criada em:</strong> {{ formatDate(instance.createdAt) }}</p>
         </div>
-        <button @click="showQRCode(instance.id)" class="btn-secondary">
-          <i class="fas fa-qrcode"></i>
-          Ver QR Code
-        </button>
+        <div class="instance-actions">
+          <button @click="showQRCode(instance.id)" class="btn-secondary">
+            <i class="fas fa-qrcode"></i>
+            QR Code
+          </button>
+          <button @click="deleteInstance(instance.id)" class="btn-danger" title="Deletar instância">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -110,10 +117,10 @@ const form = ref({
 
 const loadInstances = async () => {
   try {
-    const response = await serviceInstanceService.getInstances()
-    instances.value = response.data
+    instances.value = await serviceInstanceService.getInstances()
   } catch (error) {
     console.error('Erro ao carregar instâncias:', error)
+    alert('Erro ao carregar instâncias')
   }
 }
 
@@ -247,6 +254,32 @@ const showQRCode = async (id: string) => {
   }
 }
 
+const deleteInstance = async (id: string) => {
+  if (!confirm('Tem certeza que deseja deletar esta instância?')) {
+    return
+  }
+
+  try {
+    await serviceInstanceService.deleteInstance(id)
+    await loadInstances()
+  } catch (error: any) {
+    console.error('Erro ao deletar instância:', error)
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao deletar instância'
+    alert(`Erro ao deletar instância:\n\n${errorMessage}`)
+  }
+}
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 onMounted(() => {
   loadInstances()
 })
@@ -331,6 +364,23 @@ onMounted(() => {
         .dark & {
           color: $text-primary-dark;
         }
+      }
+    }
+  }
+
+  .instance-actions {
+    display: flex;
+    gap: $spacing-sm;
+    margin-top: $spacing-md;
+
+    .btn-danger {
+      background: rgba($error, 0.1);
+      color: $error;
+      border: 1px solid rgba($error, 0.3);
+      padding: $spacing-sm $spacing-md;
+
+      &:hover {
+        background: rgba($error, 0.2);
       }
     }
   }

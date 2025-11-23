@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { ServiceInstance, QRCodeResponse, PaginatedResponse } from '@/types'
+import type { ServiceInstance, QRCodeResponse } from '@/types'
 
 interface CreateServiceInstanceRequest {
   name: string
@@ -12,10 +12,13 @@ interface CreateServiceInstanceRequest {
 }
 
 export const serviceInstanceService = {
-  async getInstances(page = 1, limit = 10): Promise<PaginatedResponse<ServiceInstance>> {
-    const { data } = await api.get<PaginatedResponse<ServiceInstance>>('/service-instances', {
-      params: { page, limit }
-    })
+  async getInstances(): Promise<ServiceInstance[]> {
+    const { data } = await api.get<ServiceInstance[]>('/service-instances')
+    return data
+  },
+
+  async getInstanceById(id: string): Promise<ServiceInstance> {
+    const { data } = await api.get<ServiceInstance>(`/service-instances/${id}`)
     return data
   },
 

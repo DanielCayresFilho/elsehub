@@ -132,18 +132,52 @@ Configuração da conexão com a Evolution API.
 #### Criar Instância
 - **POST** `/api/service-instances`
 - **Roles**: `ADMIN`
+- **Descrição**: Cria uma instância no banco de dados E na Evolution API (se for provider EVOLUTION_API).
 - **Request JSON**:
   ```json
   {
     "name": "Whatsapp Vendas",
     "provider": "EVOLUTION_API",
     "credentials": {
-      "apiKey": "global-api-key",
-      "baseUrl": "https://evolution.seuservidor.com",
+      "serverUrl": "https://evolution.covenos.com.br",
+      "apiToken": "xrgr4qjcxhZ3m5kn2Rc3DdN5qSnhS3cp",
       "instanceName": "vendas01"
     }
   }
   ```
+- **Campos das Credenciais (Evolution API)**:
+  - `serverUrl`: URL base da Evolution API (sem barra final)
+  - `apiToken`: Chave de API (apikey) da Evolution
+  - `instanceName`: Nome único da instância (será criada na Evolution)
+- **Nota**: O backend automaticamente cria a instância na Evolution API ao salvar. Se a instância já existir na Evolution, o sistema continua normalmente.
+
+#### Listar Instâncias
+- **GET** `/api/service-instances`
+- **Roles**: `ADMIN`, `SUPERVISOR`
+- **Descrição**: Retorna todas as instâncias cadastradas no sistema.
+- **Response JSON** (Array):
+  ```json
+  [
+    {
+      "id": "uuid...",
+      "name": "Whatsapp Vendas",
+      "provider": "EVOLUTION_API",
+      "credentials": {
+        "serverUrl": "https://evolution.covenos.com.br",
+        "apiToken": "xrgr4qjcxhZ3m5kn2Rc3DdN5qSnhS3cp",
+        "instanceName": "vendas01"
+      },
+      "isActive": true,
+      "createdAt": "2025-11-22T10:00:00.000Z",
+      "updatedAt": "2025-11-22T10:00:00.000Z"
+    }
+  ]
+  ```
+
+#### Buscar Instância por ID
+- **GET** `/api/service-instances/:id`
+- **Roles**: `ADMIN`, `SUPERVISOR`
+- **Response**: Mesmo formato do item do array acima.
 
 #### Ler QR Code
 - **GET** `/api/service-instances/:id/qrcode`
