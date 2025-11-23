@@ -51,6 +51,11 @@ body, .scrollable {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   line-height: 1.2;
+  color: $text-primary-light;
+
+  .dark & {
+    color: $text-primary-dark;
+  }
 }
 
 h1 { font-size: 2rem; }
@@ -186,6 +191,11 @@ select {
   h2, h3, h4 {
     font-weight: 600;
     letter-spacing: -0.01em;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
   }
 }
 
@@ -195,6 +205,14 @@ select {
 
   .dark & {
     border-color: $border-dark;
+  }
+
+  h2, h3, h4 {
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
   }
 }
 
@@ -294,6 +312,14 @@ select {
   .dark & {
     border-color: $border-dark;
   }
+
+  h3 {
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
 }
 
 .modal-body {
@@ -346,5 +372,28 @@ select {
 
 .flex-between {
   @include flex-between;
+}
+
+// Tables
+table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    color: $text-primary-light;
+    font-weight: 600;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+
+  td {
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
 }
 

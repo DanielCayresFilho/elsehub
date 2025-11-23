@@ -32,7 +32,7 @@
       <div class="modal" @click.stop>
         <div class="modal-header">
           <h3>Nova Instância</h3>
-          <button @click="showModal = false" class="icon-btn">
+          <button @click="showModal = false" class="icon-btn" title="Fechar">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -89,6 +89,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { serviceInstanceService } from '@/services/service-instance.service'
+import { ServiceProvider } from '@/types'
 import type { ServiceInstance, QRCodeResponse } from '@/types'
 
 const instances = ref<ServiceInstance[]>([])
@@ -99,7 +100,7 @@ const qrCode = ref<QRCodeResponse | null>(null)
 
 const form = ref({
   name: '',
-  provider: 'EVOLUTION_API',
+  provider: ServiceProvider.EVOLUTION_API,
   credentials: {
     apiKey: '',
     baseUrl: '',
@@ -118,16 +119,69 @@ const loadInstances = async () => {
 
 const createInstance = async () => {
   try {
-    await serviceInstanceService.createInstance(form.value)
+    // Validate form
+    if (!form.value.name.trim()) {
+      alert('Nome é obrigatório')
+      return
+    }
+    if (!form.value.credentials.apiKey.trim()) {
+      alert('API Key é obrigatória')
+      return
+    }
+    if (!form.value.credentials.baseUrl.trim()) {
+      alert('Base URL é obrigatória')
+      return
+    }
+    if (!form.value.credentials.instanceName.trim()) {
+      alert('Nome da Instância é obrigatório')
+      return
+    }
+
+    const payload = {
+      name: form.value.name.trim(),
+      provider: ServiceProvider.EVOLUTION_API,
+      credentials: {
+        apiKey: form.value.credentials.apiKey.trim(),
+        baseUrl: form.value.credentials.baseUrl.trim(),
+        instanceName: form.value.credentials.instanceName.trim()
+      }
+    }
+
+    console.log('Criando instância com payload:', payload)
+    await serviceInstanceService.createInstance(payload)
     showModal.value = false
     form.value = {
       name: '',
-      provider: 'EVOLUTION_API',
+      provider: ServiceProvider.EVOLUTION_API,
       credentials: { apiKey: '', baseUrl: '', instanceName: '' }
     }
     await loadInstances()
-  } catch (error) {
-    alert('Erro ao criar instância')
+  } catch (error: any) {
+    console.error('Erro ao criar instância:', error)
+    console.error('Response data:', error.response?.data)
+    
+    let errorMessage = 'Erro ao criar instância'
+    
+    if (error.response?.data) {
+      const data = error.response.data
+      if (data.message) {
+        errorMessage = data.message
+      } else if (data.error) {
+        errorMessage = data.error
+      } else if (typeof data === 'string') {
+        errorMessage = data
+      } else {
+        // Try to extract validation errors
+        const errors = Object.values(data).flat()
+        if (errors.length > 0) {
+          errorMessage = errors.join(', ')
+        }
+      }
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   }
 }
 
@@ -160,6 +214,14 @@ onMounted(() => {
 .page-header {
   @include flex-between;
   margin-bottom: $spacing-xl;
+
+  h2 {
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
 }
 
 .instances-grid {
@@ -174,6 +236,14 @@ onMounted(() => {
   .instance-header {
     @include flex-between;
     margin-bottom: $spacing-md;
+
+    h3 {
+      color: $text-primary-light;
+
+      .dark & {
+        color: $text-primary-dark;
+      }
+    }
 
     .status-badge {
       padding: $spacing-xs $spacing-sm;
