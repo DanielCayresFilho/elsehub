@@ -38,14 +38,14 @@
           @click="selectConversation(conversation.id)"
         >
           <div class="conversation-avatar">
-            {{ getInitials(conversation.contact?.name || 'Desconhecido') }}
+            {{ getInitials(conversation.contactName || conversation.contact?.name || 'Sem nome') }}
           </div>
           <div class="conversation-info">
             <div class="conversation-header">
-              <h4>{{ conversation.contact?.name || 'Desconhecido' }}</h4>
-              <span class="conversation-time">{{ formatDate(conversation.lastMessageAt) }}</span>
+              <h4>{{ conversation.contactName || conversation.contact?.name || 'Sem nome' }}</h4>
+              <span class="conversation-time">{{ formatDate(conversation.lastMessageAt || conversation.updatedAt) }}</span>
             </div>
-            <p class="conversation-phone">{{ formatPhone(conversation.contact?.phone) }}</p>
+            <p class="conversation-phone">{{ formatPhone(conversation.contactPhone || conversation.contact?.phone) }}</p>
           </div>
           <span v-if="conversation.unreadCount" class="unread-badge">{{ conversation.unreadCount }}</span>
         </div>
@@ -65,11 +65,11 @@
         <div class="chat-header">
           <div class="contact-info">
             <div class="contact-avatar">
-              {{ getInitials(activeConversation?.contact?.name || 'Desconhecido') }}
+              {{ getInitials(activeConversation?.contactName || activeConversation?.contact?.name || 'Sem nome') }}
             </div>
             <div>
-              <h3>{{ activeConversation?.contact?.name || 'Desconhecido' }}</h3>
-              <p>{{ formatPhone(activeConversation?.contact?.phone) }}</p>
+              <h3>{{ activeConversation?.contactName || activeConversation?.contact?.name || 'Sem nome' }}</h3>
+              <p>{{ formatPhone(activeConversation?.contactPhone || activeConversation?.contact?.phone) }}</p>
             </div>
           </div>
           <div class="chat-actions">
@@ -84,10 +84,13 @@
 
         <!-- Messages -->
         <div class="messages-container" ref="messagesContainer">
+          <div v-if="messages.length === 0" class="empty-messages">
+            <p>Nenhuma mensagem ainda. Envie a primeira mensagem!</p>
+          </div>
           <div v-for="message in messages" :key="message.id" :class="['message', { 'message-from-me': message.fromMe }]">
             <div class="message-bubble">
               <p class="message-content">{{ message.content }}</p>
-              <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
+              <span class="message-time">{{ formatMessageTime(message.timestamp || message.createdAt) }}</span>
             </div>
           </div>
         </div>
@@ -274,6 +277,7 @@ import { tabulationService } from '@/services/tabulation.service'
 import { conversationService } from '@/services/conversation.service'
 import { serviceInstanceService } from '@/services/service-instance.service'
 import { contactService } from '@/services/contact.service'
+import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
 import type { User, Tabulation, ServiceInstance, Contact } from '@/types'
 
@@ -341,11 +345,24 @@ const selectConversation = async (id: string) => {
   scrollToBottom()
 }
 
-const sendMessage = () => {
+const sendMessage = async () => {
   if (!newMessage.value.trim() || !activeConversationId.value) return
   
-  wsService.sendMessage(activeConversationId.value, newMessage.value.trim())
+  const messageContent = newMessage.value.trim()
   newMessage.value = ''
+  
+  try {
+    // Enviar via HTTP API (que usa Evolution API)
+    await messageService.sendMessage(activeConversationId.value, messageContent)
+    
+    // Recarregar mensagens para garantir que está sincronizado
+    await conversationStore.selectConversation(activeConversationId.value)
+  } catch (error: any) {
+    console.error('Erro ao enviar mensagem:', error)
+    // Restaurar mensagem em caso de erro
+    newMessage.value = messageContent
+    alert(error.response?.data?.message || 'Erro ao enviar mensagem')
+  }
 }
 
 const transferConversation = async () => {
@@ -469,11 +486,8 @@ const sendNewMessage = async () => {
       await loadConversations()
     }
 
-    // Join room and send message
-    wsService.joinRoom(conversation.id)
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    wsService.sendMessage(conversation.id, newMessageContent.value.trim())
+    // Enviar mensagem via HTTP API
+    await messageService.sendMessage(conversation.id, newMessageContent.value.trim())
     
     // Close modal and select conversation
     showNewMessageModal.value = false
@@ -525,23 +539,40 @@ const getInitials = (name: string) => {
     : names[0].substring(0, 2).toUpperCase()
 }
 
-const formatDate = (date: string) => {
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  const minutes = Math.floor(diff / 60000)
+const formatDate = (date?: string | null) => {
+  if (!date) return 'Agora'
   
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  try {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return 'Agora'
+    
+    const now = new Date()
+    const diff = now.getTime() - d.getTime()
+    const minutes = Math.floor(diff / 60000)
+    
+    if (minutes < 1) return 'Agora'
+    if (minutes < 60) return `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h`
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  } catch (e) {
+    return 'Agora'
+  }
 }
 
-const formatMessageTime = (timestamp: string) => {
-  return new Date(timestamp).toLocaleTimeString('pt-BR', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
+const formatMessageTime = (timestamp?: string) => {
+  if (!timestamp) return ''
+  
+  try {
+    const date = new Date(timestamp)
+    if (isNaN(date.getTime())) return ''
+    return date.toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
+  } catch (e) {
+    return ''
+  }
 }
 
 const formatPhone = (phone?: string) => {
@@ -842,6 +873,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: $spacing-md;
+
+  .empty-messages {
+    @include flex-center;
+    flex: 1;
+    color: $text-secondary-light;
+    font-size: 0.875rem;
+
+    .dark & {
+      color: $text-secondary-dark;
+    }
+  }
 }
 
 .message {

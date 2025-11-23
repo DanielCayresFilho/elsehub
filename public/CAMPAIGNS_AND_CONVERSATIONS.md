@@ -406,9 +406,11 @@ As conversas 1x1 são atendimentos individuais entre um contato e um operador. O
 1. **Criar** a conversa (status: `OPEN`, sem operador atribuído)
 2. Conversa entra na **fila** de conversas sem operador
 3. **Atribuir** um operador à conversa
-4. Operador e contato trocam mensagens
+4. Operador e contato trocam mensagens via `POST /api/messages/send` (veja documentação de Mensagens)
 5. **Fechar** a conversa com tabulação (status: `CLOSED`)
 6. Conversa é movida para `finished_conversations` (histórico)
+
+**Nota**: Para enviar mensagens, use o endpoint `POST /api/messages/send`. As mensagens são enviadas em tempo real via Evolution API. Veja a documentação completa de Mensagens no `MASTER_DOCUMENTATION.md`.
 
 ---
 

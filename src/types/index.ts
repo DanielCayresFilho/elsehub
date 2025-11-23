@@ -99,13 +99,19 @@ export interface QRCodeResponse {
 export interface Conversation {
   id: string
   contactId: string
+  contactName?: string // Nome do contato (retornado pelo backend)
+  contactPhone?: string // Telefone do contato (retornado pelo backend)
   contact?: Contact
   operatorId?: string
+  operatorName?: string // Nome do operador (retornado pelo backend)
   operator?: User
   serviceInstanceId: string
+  serviceInstanceName?: string // Nome da instância (retornado pelo backend)
   serviceInstance?: ServiceInstance
   status: ConversationStatus
-  lastMessageAt: string
+  startTime?: string // Data de início da conversa
+  lastMessageAt?: string | null
+  messageCount?: number
   closedAt?: string
   tabulationId?: string
   tabulation?: Tabulation

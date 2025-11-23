@@ -28,14 +28,19 @@ export const useConversationStore = defineStore('conversation', () => {
       activeConversation.value = conversation
       messages.value = conversation.messages || []
       
-      // Join WebSocket room
+      // Join WebSocket room para receber mensagens em tempo real
       wsService.joinRoom(conversationId)
     } catch (error) {
       console.error('Erro ao selecionar conversa:', error)
+      throw error
     }
   }
 
   function addMessage(message: Message) {
+    // Evitar duplicatas
+    const exists = messages.value.find(m => m.id === message.id)
+    if (exists) return
+    
     if (activeConversation.value?.id === message.conversationId) {
       messages.value.push(message)
     }
@@ -43,7 +48,7 @@ export const useConversationStore = defineStore('conversation', () => {
     // Update conversation list
     const convIndex = conversations.value.findIndex(c => c.id === message.conversationId)
     if (convIndex !== -1) {
-      conversations.value[convIndex].lastMessageAt = message.timestamp
+      conversations.value[convIndex].lastMessageAt = message.timestamp || message.createdAt
     }
   }
 
