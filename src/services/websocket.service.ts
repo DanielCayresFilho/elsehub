@@ -14,7 +14,14 @@ class WebSocketService {
       return
     }
 
-    this.socket = io(import.meta.env.VITE_WS_URL, {
+    // Conecta ao WebSocket conforme documentação
+    // Se VITE_WS_URL não terminar com /chat, adiciona
+    let wsUrl = import.meta.env.VITE_WS_URL || ''
+    if (wsUrl && !wsUrl.endsWith('/chat')) {
+      wsUrl = wsUrl.replace(/\/$/, '') + '/chat'
+    }
+    
+    this.socket = io(wsUrl, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
@@ -36,12 +43,26 @@ class WebSocketService {
       console.log('❌ WebSocket desconectado')
     })
 
+    // Eventos do servidor conforme documentação
+    this.socket.on('message:new', (message: Message) => {
+      this.emit('message:new', message)
+    })
+
+    this.socket.on('conversation:updated', (conversation: Conversation) => {
+      this.emit('conversation:updated', conversation)
+    })
+
+    this.socket.on('conversation:closed', (conversation: Conversation) => {
+      this.emit('conversation:closed', conversation)
+    })
+
+    // Mantém compatibilidade com eventos antigos
     this.socket.on('newMessage', (message: Message) => {
-      this.emit('newMessage', message)
+      this.emit('message:new', message)
     })
 
     this.socket.on('conversationAssigned', (conversation: Conversation) => {
-      this.emit('conversationAssigned', conversation)
+      this.emit('conversation:updated', conversation)
     })
 
     this.socket.on('error', (error: any) => {
@@ -50,15 +71,18 @@ class WebSocketService {
   }
 
   joinRoom(conversationId: string) {
-    this.socket?.emit('joinRoom', { conversationId })
+    // Usa o evento correto conforme documentação
+    this.socket?.emit('conversation:join', { conversationId })
   }
 
   leaveRoom(conversationId: string) {
-    this.socket?.emit('leaveRoom', { conversationId })
+    // Usa o evento correto conforme documentação
+    this.socket?.emit('conversation:leave', { conversationId })
   }
 
   sendMessage(conversationId: string, content: string) {
-    this.socket?.emit('sendMessage', { conversationId, content })
+    // Usa o evento correto conforme documentação (opcional, pois estamos usando HTTP API)
+    this.socket?.emit('message:send', { conversationId, content })
   }
 
   on(event: string, callback: Function) {

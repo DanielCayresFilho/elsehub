@@ -125,13 +125,16 @@ export interface Message {
   id: string
   conversationId: string
   content: string
-  fromMe: boolean
-  senderId?: string
+  fromMe?: boolean // Se true, mensagem foi enviada pelo operador
+  direction?: 'INBOUND' | 'OUTBOUND' // INBOUND = recebida, OUTBOUND = enviada
+  senderId?: string // ID do operador (null se for do cliente)
   sender?: User
-  timestamp: string
-  delivered: boolean
-  read: boolean
+  timestamp?: string
   createdAt: string
+  delivered?: boolean
+  read?: boolean
+  status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
+  externalId?: string // ID da mensagem na Evolution/Meta API
 }
 
 // Campaign Types

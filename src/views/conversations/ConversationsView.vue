@@ -87,7 +87,7 @@
           <div v-if="messages.length === 0" class="empty-messages">
             <p>Nenhuma mensagem ainda. Envie a primeira mensagem!</p>
           </div>
-          <div v-for="message in messages" :key="message.id" :class="['message', { 'message-from-me': message.fromMe }]">
+          <div v-for="message in messages" :key="message.id" :class="['message', { 'message-from-me': message.fromMe || message.direction === 'OUTBOUND' }]">
             <div class="message-bubble">
               <p class="message-content">{{ message.content }}</p>
               <span class="message-time">{{ formatMessageTime(message.timestamp || message.createdAt) }}</span>
@@ -341,8 +341,15 @@ const loadConversations = async () => {
 
 const selectConversation = async (id: string) => {
   activeConversationId.value = id
-  await conversationStore.selectConversation(id)
-  scrollToBottom()
+  try {
+    await conversationStore.selectConversation(id)
+    // Força scroll após carregar mensagens
+    await nextTick()
+    scrollToBottom()
+  } catch (error) {
+    console.error('Erro ao selecionar conversa:', error)
+    alert('Erro ao carregar conversa')
+  }
 }
 
 const sendMessage = async () => {
@@ -353,10 +360,24 @@ const sendMessage = async () => {
   
   try {
     // Enviar via HTTP API (que usa Evolution API)
-    await messageService.sendMessage(activeConversationId.value, messageContent)
+    const sentMessage = await messageService.sendMessage(activeConversationId.value, messageContent)
+    console.log('Mensagem enviada:', sentMessage)
     
-    // Recarregar mensagens para garantir que está sincronizado
-    await conversationStore.selectConversation(activeConversationId.value)
+    // Adiciona a mensagem imediatamente à lista (otimista)
+    conversationStore.addMessage(sentMessage)
+    
+    // Scroll para baixo após adicionar
+    await nextTick()
+    scrollToBottom()
+    
+    // Recarrega a conversa após um pequeno delay para garantir sincronização
+    setTimeout(async () => {
+      try {
+        await conversationStore.selectConversation(activeConversationId.value!)
+      } catch (e) {
+        console.error('Erro ao recarregar conversa:', e)
+      }
+    }, 500)
   } catch (error: any) {
     console.error('Erro ao enviar mensagem:', error)
     // Restaurar mensagem em caso de erro

@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Message } from '@/types'
+import type { Message, PaginatedResponse } from '@/types'
 
 interface SendMessageRequest {
   conversationId: string
@@ -11,6 +11,12 @@ export const messageService = {
     const payload: SendMessageRequest = { conversationId, content }
     const { data } = await api.post<Message>('/messages/send', payload)
     return data
+  },
+
+  async getMessages(conversationId: string, page = 1, limit = 50): Promise<PaginatedResponse<Message>> {
+    const { data } = await api.get<PaginatedResponse<Message>>(`/conversations/${conversationId}/messages`, {
+      params: { page, limit }
+    })
+    return data
   }
 }
-
