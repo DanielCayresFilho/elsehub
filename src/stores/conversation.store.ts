@@ -57,6 +57,7 @@ export const useConversationStore = defineStore('conversation', () => {
           try {
             const messagesResponse = await messageService.getMessages(conversationId, 1, 100)
             console.log('Mensagens recebidas do endpoint:', messagesResponse.data?.length || 0)
+            // O endpoint retorna { data: [...], meta: {...} }
             messages.value = messagesResponse.data || []
           } catch (msgError: any) {
             // Se o endpoint não existir (404), preserva mensagens existentes se for a mesma conversa

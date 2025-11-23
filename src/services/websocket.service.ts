@@ -27,10 +27,10 @@ class WebSocketService {
     }
 
     // Conecta ao WebSocket conforme documentação
-    // O backend espera conexões em /chat, então precisamos configurar o path do Socket.IO
+    // URL base (sem /chat)
     let wsUrl = import.meta.env.VITE_WS_URL || ''
     
-    // Remove /chat se existir, pois vamos usar o path do Socket.IO
+    // Remove /chat se existir, pois vamos usar como namespace
     wsUrl = wsUrl.replace(/\/chat\/?$/, '')
     
     // Se não tiver protocolo, adiciona wss://
@@ -38,22 +38,23 @@ class WebSocketService {
       wsUrl = 'wss://' + wsUrl.replace(/^https?:\/\//, '')
     }
     
-    console.log('🔌 Conectando ao WebSocket:', wsUrl)
-    console.log('🔑 Token presente:', !!token, token ? token.substring(0, 20) + '...' : 'N/A')
-    console.log('📡 Path do Socket.IO: /chat/socket.io')
+    // Namespace conforme documentação
+    const WS_NAMESPACE = '/chat'
+    const fullUrl = `${wsUrl}${WS_NAMESPACE}`
     
-    // O backend está configurado para aceitar Socket.IO em /chat
-    // Então o path deve ser /chat/socket.io (não apenas /socket.io)
-    this.socket = io(wsUrl, {
+    console.log('🔌 Conectando ao WebSocket:', fullUrl)
+    console.log('🔑 Token presente:', !!token, token ? token.substring(0, 20) + '...' : 'N/A')
+    
+    // ✅ CORRETO: Conecta usando URL + namespace conforme documentação
+    // Socket.IO adiciona /socket.io automaticamente
+    this.socket = io(fullUrl, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionAttempts: Infinity,
       reconnectionDelayMax: 10000,
-      timeout: 20000,
-      // O backend espera Socket.IO em /chat, então o path é /chat/socket.io
-      path: '/chat/socket.io'
+      timeout: 20000
     })
 
     this.setupEventListeners()
