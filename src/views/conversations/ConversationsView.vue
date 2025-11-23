@@ -405,20 +405,14 @@ const sendMessage = async () => {
     console.log('Mensagem enviada:', sentMessage)
     
     // Adiciona a mensagem imediatamente à lista (otimista)
+    // NÃO recarrega a conversa para não perder as mensagens já carregadas
     conversationStore.addMessage(sentMessage)
     
     // Scroll para baixo após adicionar
     await nextTick()
     scrollToBottom()
     
-    // Recarrega a conversa após um pequeno delay para garantir sincronização
-    setTimeout(async () => {
-      try {
-        await conversationStore.selectConversation(activeConversationId.value!)
-      } catch (e) {
-        console.error('Erro ao recarregar conversa:', e)
-      }
-    }, 500)
+    // NÃO recarrega a conversa - a mensagem já foi adicionada e o WebSocket vai atualizar
   } catch (error: any) {
     console.error('Erro ao enviar mensagem:', error)
     // Restaurar mensagem em caso de erro

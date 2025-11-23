@@ -28,56 +28,49 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       console.log('Selecionando conversa:', conversationId)
       
+      // Verifica se é a mesma conversa ANTES de atualizar activeConversation
+      const isSameConversation = activeConversation.value?.id === conversationId
+      const existingMessages = isSameConversation ? [...messages.value] : []
+      
       const conversation = await conversationService.getConversation(conversationId)
       activeConversation.value = conversation
       
       console.log('Conversa carregada:', conversation)
       console.log('Mensagens no objeto:', conversation.messages?.length || 0)
+      console.log('É a mesma conversa?', isSameConversation)
+      console.log('Mensagens existentes:', existingMessages.length)
       
-      // Limpa mensagens anteriores
-      messages.value = []
+      // Se mudou de conversa, limpa mensagens
+      if (!isSameConversation) {
+        messages.value = []
+      }
       
-      // Tenta carregar mensagens da conversa
-      // Primeiro verifica se vem no objeto da conversa
-      if (conversation.messages && conversation.messages.length > 0) {
-        console.log('Carregando mensagens do objeto da conversa')
-        messages.value = conversation.messages
-      } else {
-        // Se não vier, tenta buscar via endpoint de mensagens
-        console.log('Tentando buscar mensagens via endpoint...')
-        try {
-          const messagesResponse = await messageService.getMessages(conversationId, 1, 100)
-          console.log('Mensagens recebidas do endpoint:', messagesResponse.data?.length || 0)
-          messages.value = messagesResponse.data || []
-        } catch (msgError: any) {
-          // Se o endpoint não existir (404), tenta endpoint alternativo
-          console.warn('Endpoint /conversations/:id/messages não disponível, tentando alternativas:', msgError)
-          
-          // Tenta endpoint alternativo: GET /api/messages?conversationId=...
+      // Tenta carregar mensagens da conversa apenas se não tiver mensagens ainda
+      if (messages.value.length === 0) {
+        // Primeiro verifica se vem no objeto da conversa
+        if (conversation.messages && conversation.messages.length > 0) {
+          console.log('Carregando mensagens do objeto da conversa')
+          messages.value = conversation.messages
+        } else {
+          // Se não vier, tenta buscar via endpoint de mensagens
+          console.log('Tentando buscar mensagens via endpoint...')
           try {
-            const { data } = await api.get<Message[] | { data: Message[] }>(`/messages`, {
-              params: { conversationId, page: 1, limit: 100 }
-            })
-            console.log('Mensagens recebidas do endpoint alternativo:', data)
-            // Pode retornar array direto ou objeto com data
-            if (Array.isArray(data)) {
-              messages.value = data
-            } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
-              messages.value = data.data
+            const messagesResponse = await messageService.getMessages(conversationId, 1, 100)
+            console.log('Mensagens recebidas do endpoint:', messagesResponse.data?.length || 0)
+            messages.value = messagesResponse.data || []
+          } catch (msgError: any) {
+            // Se o endpoint não existir (404), preserva mensagens existentes se for a mesma conversa
+            console.warn('Endpoint de mensagens não disponível. Usando apenas WebSocket para receber mensagens em tempo real.')
+            if (isSameConversation && existingMessages.length > 0) {
+              console.log('Preservando mensagens existentes da mesma conversa:', existingMessages.length)
+              messages.value = existingMessages
             } else {
               messages.value = []
             }
-            console.log('Mensagens processadas:', messages.value.length)
-          } catch (altError: any) {
-            console.warn('Nenhum endpoint de mensagens disponível, usando apenas WebSocket:', altError)
-            console.warn('Erro detalhado:', {
-              status: altError.response?.status,
-              message: altError.response?.data?.message || altError.message,
-              url: altError.config?.url
-            })
-            messages.value = []
           }
         }
+      } else {
+        console.log('Mantendo mensagens já carregadas:', messages.value.length)
       }
       
       // Ordena mensagens por data (mais antigas primeiro)
@@ -90,11 +83,27 @@ export const useConversationStore = defineStore('conversation', () => {
       }
       
       // Join WebSocket room para receber mensagens em tempo real
-      wsService.joinRoom(conversationId)
+      // Aguarda um pouco para garantir que WebSocket está conectado
+      if (wsService.isConnected()) {
+        wsService.joinRoom(conversationId)
+      } else {
+        console.warn('WebSocket não conectado, tentando conectar antes de entrar na sala...')
+        wsService.connect()
+        // Aguarda conexão e então entra na sala
+        setTimeout(() => {
+          if (wsService.isConnected()) {
+            wsService.joinRoom(conversationId)
+          } else {
+            console.error('Não foi possível conectar ao WebSocket')
+          }
+        }, 1000)
+      }
       
       console.log('Conversa selecionada:', conversation)
       console.log('Total de mensagens carregadas:', messages.value.length)
-      console.log('Mensagens:', messages.value)
+      if (messages.value.length > 0) {
+        console.log('Primeiras mensagens:', messages.value.slice(0, 3))
+      }
     } catch (error) {
       console.error('Erro ao selecionar conversa:', error)
       throw error

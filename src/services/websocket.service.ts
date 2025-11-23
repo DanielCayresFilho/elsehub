@@ -6,7 +6,19 @@ class WebSocketService {
   private listeners: Map<string, Set<Function>> = new Map()
 
   connect() {
-    if (this.socket?.connected) return
+    // Se já está conectado, não reconecta
+    if (this.socket?.connected) {
+      console.log('WebSocket já está conectado')
+      return
+    }
+    
+    // Se já existe socket mas não está conectado, desconecta primeiro
+    if (this.socket && !this.socket.connected) {
+      console.log('Desconectando socket antigo antes de reconectar...')
+      this.socket.removeAllListeners()
+      this.socket.disconnect()
+      this.socket = null
+    }
 
     const token = localStorage.getItem('accessToken')
     if (!token) {
@@ -25,8 +37,10 @@ class WebSocketService {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+      reconnectionDelay: 2000,
+      reconnectionAttempts: Infinity, // Reconecta infinitamente
+      reconnectionDelayMax: 10000,
+      timeout: 20000
     })
 
     this.setupEventListeners()
@@ -39,19 +53,23 @@ class WebSocketService {
       console.log('✅ WebSocket conectado')
     })
 
-    this.socket.on('disconnect', () => {
-      console.log('❌ WebSocket desconectado')
-      // Tentar reconectar após 3 segundos (já tem reconexão automática, mas garante)
-      setTimeout(() => {
-        if (!this.socket?.connected) {
-          console.log('Tentando reconectar WebSocket...')
-          this.connect()
-        }
-      }, 3000)
+    this.socket.on('disconnect', (reason: string) => {
+      console.log('❌ WebSocket desconectado. Motivo:', reason)
+      // Não tenta reconectar manualmente aqui, deixa o Socket.IO fazer isso automaticamente
+      // A reconexão automática já está configurada no io() com reconnectionAttempts: Infinity
+    })
+    
+    this.socket.on('reconnect', (attemptNumber: number) => {
+      console.log('🔄 WebSocket reconectado após', attemptNumber, 'tentativas')
+    })
+    
+    this.socket.on('reconnect_attempt', (attemptNumber: number) => {
+      console.log('🔄 Tentando reconectar WebSocket... Tentativa', attemptNumber)
     })
 
     // Eventos do servidor conforme documentação
     this.socket.on('message:new', (message: Message) => {
+      console.log('📨 WebSocket recebeu evento message:new:', message)
       this.emit('message:new', message)
     })
 
@@ -94,7 +112,28 @@ class WebSocketService {
 
   joinRoom(conversationId: string) {
     // Usa o evento correto conforme documentação
-    this.socket?.emit('conversation:join', { conversationId })
+    if (this.socket?.connected) {
+      console.log('🚪 Entrando na sala da conversa:', conversationId)
+      this.socket.emit('conversation:join', { conversationId }, (response: any) => {
+        if (response) {
+          console.log('✅ Resposta do conversation:join:', response)
+        }
+      })
+    } else {
+      console.warn('⚠️ WebSocket não conectado, não é possível entrar na sala. Tentando conectar...')
+      this.connect()
+      // Aguarda conexão e tenta novamente
+      const checkAndJoin = setInterval(() => {
+        if (this.socket?.connected) {
+          console.log('🚪 WebSocket conectado, entrando na sala agora:', conversationId)
+          this.socket.emit('conversation:join', { conversationId })
+          clearInterval(checkAndJoin)
+        }
+      }, 500)
+      
+      // Para de tentar após 5 segundos
+      setTimeout(() => clearInterval(checkAndJoin), 5000)
+    }
   }
 
   leaveRoom(conversationId: string) {
