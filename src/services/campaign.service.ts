@@ -19,11 +19,11 @@ export const campaignService = {
     return data
   },
 
-  async uploadContacts(id: string, file: File): Promise<{ uploaded: number }> {
+  async uploadContacts(id: string, file: File): Promise<{ totalContacts: number }> {
     const formData = new FormData()
     formData.append('file', file)
     
-    const { data } = await api.post<{ uploaded: number }>(
+    const { data } = await api.post<{ totalContacts: number }>(
       `/campaigns/${id}/upload`,
       formData,
       {

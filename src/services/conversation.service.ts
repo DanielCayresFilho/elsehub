@@ -38,9 +38,13 @@ export const conversationService = {
     return data
   },
 
-  async closeConversation(id: string, tabulationId: string): Promise<Conversation> {
+  async closeConversation(id: string, tabulationId: string): Promise<void> {
     const payload: CloseConversationRequest = { tabulationId }
-    const { data } = await api.post<Conversation>(`/conversations/${id}/close`, payload)
+    await api.post(`/conversations/${id}/close`, payload)
+  },
+
+  async getQueue(): Promise<Conversation[]> {
+    const { data } = await api.get<Conversation[]>('/conversations/queue')
     return data
   }
 }

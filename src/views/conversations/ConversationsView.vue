@@ -158,12 +158,24 @@
           </div>
           <div class="form-group">
             <label>Contato</label>
-            <select v-model="newMessageContactId" :disabled="!newMessageInstanceId || sendingMessage">
-              <option value="">Selecione...</option>
-              <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
-                {{ contact.name }} - {{ formatPhone(contact.phone) }}
-              </option>
-            </select>
+            <div class="contact-selector">
+              <select v-model="newMessageContactId" :disabled="!newMessageInstanceId || sendingMessage || loadingContacts">
+                <option value="">Selecione...</option>
+                <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
+                  {{ contact.name }} - {{ formatPhone(contact.phone) }}
+                </option>
+              </select>
+              <button 
+                v-if="newMessageInstanceId" 
+                @click="showCreateContactModal = true" 
+                class="btn-link" 
+                type="button"
+                :disabled="sendingMessage"
+                title="Criar novo contato"
+              >
+                <i class="fas fa-plus"></i> Novo
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label>Mensagem</label>
@@ -180,6 +192,46 @@
           <button @click="sendNewMessage" class="btn-primary" :disabled="!canSendNewMessage || sendingMessage">
             <i class="fas fa-paper-plane"></i>
             {{ sendingMessage ? 'Enviando...' : 'Enviar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Contact Modal -->
+    <div v-if="showCreateContactModal" class="modal-overlay" @click="showCreateContactModal = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <h3>Novo Contato</h3>
+          <button @click="showCreateContactModal = false" class="icon-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Nome *</label>
+            <input type="text" v-model="newContactForm.name" required />
+          </div>
+          <div class="form-group">
+            <label>Telefone *</label>
+            <input type="text" v-model="newContactForm.phone" placeholder="+5511999999999" required />
+          </div>
+          <div class="form-group">
+            <label>CPF</label>
+            <input type="text" v-model="newContactForm.cpf" />
+          </div>
+          <div class="form-group">
+            <label>Informação Adicional 1</label>
+            <input type="text" v-model="newContactForm.additional1" />
+          </div>
+          <div class="form-group">
+            <label>Informação Adicional 2</label>
+            <input type="text" v-model="newContactForm.additional2" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showCreateContactModal = false" class="btn-secondary" :disabled="creatingContact">Cancelar</button>
+          <button @click="createContact" class="btn-primary" :disabled="creatingContact || !newContactForm.name.trim() || !newContactForm.phone.trim()">
+            {{ creatingContact ? 'Criando...' : 'Criar' }}
           </button>
         </div>
       </div>
@@ -249,6 +301,16 @@ const newMessageInstanceId = ref('')
 const newMessageContactId = ref('')
 const newMessageContent = ref('')
 const sendingMessage = ref(false)
+const loadingContacts = ref(false)
+const showCreateContactModal = ref(false)
+const newContactForm = ref({
+  name: '',
+  phone: '',
+  cpf: '',
+  additional1: '',
+  additional2: ''
+})
+const creatingContact = ref(false)
 
 const conversations = computed(() => conversationStore.conversations)
 const activeConversation = computed(() => conversationStore.activeConversation)
@@ -309,10 +371,10 @@ const canSendNewMessage = computed(() => {
 
 const loadInstances = async () => {
   try {
-    const response = await serviceInstanceService.getInstances(1, 100)
-    instances.value = response.data.filter(i => i.isActive)
+    instances.value = (await serviceInstanceService.getInstances()).filter(i => i.isActive)
   } catch (error) {
     console.error('Erro ao carregar instâncias:', error)
+    alert('Erro ao carregar instâncias')
   }
 }
 
@@ -321,11 +383,49 @@ const loadContacts = async () => {
     contacts.value = []
     return
   }
+  loadingContacts.value = true
   try {
     const response = await contactService.getContacts(1, 100)
     contacts.value = response.data
   } catch (error) {
     console.error('Erro ao carregar contatos:', error)
+    alert('Erro ao carregar contatos')
+  } finally {
+    loadingContacts.value = false
+  }
+}
+
+const createContact = async () => {
+  if (!newContactForm.value.name.trim() || !newContactForm.value.phone.trim()) {
+    alert('Nome e telefone são obrigatórios')
+    return
+  }
+
+  creatingContact.value = true
+  try {
+    const contact = await contactService.createContact({
+      name: newContactForm.value.name.trim(),
+      phone: newContactForm.value.phone.trim(),
+      cpf: newContactForm.value.cpf.trim() || undefined,
+      additional1: newContactForm.value.additional1.trim() || undefined,
+      additional2: newContactForm.value.additional2.trim() || undefined
+    })
+    
+    await loadContacts()
+    newMessageContactId.value = contact.id
+    showCreateContactModal.value = false
+    newContactForm.value = {
+      name: '',
+      phone: '',
+      cpf: '',
+      additional1: '',
+      additional2: ''
+    }
+  } catch (error: any) {
+    console.error('Erro ao criar contato:', error)
+    alert(error.response?.data?.message || 'Erro ao criar contato')
+  } finally {
+    creatingContact.value = false
   }
 }
 
@@ -910,13 +1010,46 @@ onUnmounted(() => {
   }
 
   select,
-  textarea {
+  textarea,
+  input {
     @include input-base;
   }
 
   textarea {
     resize: vertical;
     min-height: 80px;
+  }
+}
+
+.contact-selector {
+  display: flex;
+  gap: $spacing-sm;
+  align-items: flex-start;
+
+  select {
+    flex: 1;
+  }
+
+  .btn-link {
+    background: none;
+    border: none;
+    color: $primary-light;
+    cursor: pointer;
+    padding: $spacing-sm;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+
+    &:hover {
+      opacity: 0.8;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   }
 }
 </style>
