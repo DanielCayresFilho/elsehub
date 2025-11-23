@@ -57,10 +57,11 @@ class WebSocketService {
       timeout: 20000
     })
 
-    this.setupEventListeners()
+    // Passa o token para setupEventListeners para evitar erro de referência
+    this.setupEventListeners(token)
   }
 
-  private setupEventListeners() {
+  private setupEventListeners(currentToken: string) {
     if (!this.socket) return
 
     this.socket.on('connect', () => {
@@ -81,7 +82,7 @@ class WebSocketService {
         // Tenta reconectar com novo token após um delay
         setTimeout(() => {
           const newToken = localStorage.getItem('accessToken')
-          if (newToken && newToken !== token) {
+          if (newToken && newToken !== currentToken) {
             console.log('🔄 Token atualizado, tentando reconectar...')
             this.connect()
           }
