@@ -11,6 +11,12 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
+    name: 'Home',
+    component: () => import('@/views/HomeView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/DashboardView.vue'),
     meta: { requiresAuth: true }
@@ -111,9 +117,9 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // Redirect to dashboard if already authenticated and trying to access login
+  // Redirect to home if already authenticated and trying to access login
   if (to.name === 'Login' && isAuthenticated) {
-    next({ name: 'Dashboard' })
+    next({ name: 'Home' })
     return
   }
 
@@ -123,7 +129,7 @@ router.beforeEach(async (to, from, next) => {
     const allowedRoles = to.meta.roles as UserRole[]
     
     if (user && !allowedRoles.includes(user.role)) {
-      next({ name: 'Dashboard' })
+      next({ name: 'Home' })
       return
     }
   }

@@ -7,8 +7,8 @@
           <div class="stat-info">
             <p class="stat-label">Conversas Ativas</p>
             <p class="stat-value">{{ stats.activeConversations }}</p>
-            <p class="stat-change success">
-              <i class="fas fa-arrow-up"></i> 12% desde ontem
+            <p v-if="stats.activeConversations > 0" class="stat-change success">
+              <i class="fas fa-check-circle"></i> Ativas
             </p>
           </div>
           <div class="stat-icon blue">
@@ -22,8 +22,8 @@
           <div class="stat-info">
             <p class="stat-label">Mensagens Hoje</p>
             <p class="stat-value">{{ stats.totalMessages }}</p>
-            <p class="stat-change success">
-              <i class="fas fa-arrow-up"></i> 8% desde ontem
+            <p v-if="stats.totalMessages > 0" class="stat-change success">
+              <i class="fas fa-envelope"></i> Total
             </p>
           </div>
           <div class="stat-icon green">
@@ -37,8 +37,8 @@
           <div class="stat-info">
             <p class="stat-label">Taxa de Resposta</p>
             <p class="stat-value">{{ stats.responseRate }}%</p>
-            <p class="stat-change error">
-              <i class="fas fa-arrow-down"></i> 3% desde ontem
+            <p v-if="stats.responseRate > 0" class="stat-change" :class="stats.responseRate >= 80 ? 'success' : 'warning'">
+              <i class="fas fa-chart-line"></i> Taxa
             </p>
           </div>
           <div class="stat-icon orange">
@@ -52,8 +52,8 @@
           <div class="stat-info">
             <p class="stat-label">Tempo Médio</p>
             <p class="stat-value">{{ formatTime(stats.averageResponseTime) }}</p>
-            <p class="stat-change success">
-              <i class="fas fa-arrow-up"></i> 15% desde ontem
+            <p v-if="stats.averageResponseTime > 0" class="stat-change info">
+              <i class="fas fa-clock"></i> Médio
             </p>
           </div>
           <div class="stat-icon purple">
@@ -163,11 +163,11 @@
             </div>
             <div class="metric">
               <div class="metric-header">
-                <span>Satisfação</span>
-                <span class="metric-value">94%</span>
+                <span>Conversas Fechadas</span>
+                <span class="metric-value">{{ stats.closedConversations }}</span>
               </div>
               <div class="progress-bar">
-                <div class="progress-fill purple" style="width: 94%"></div>
+                <div class="progress-fill purple" :style="{ width: stats.totalConversations > 0 ? `${(stats.closedConversations / stats.totalConversations) * 100}%` : '0%' }"></div>
               </div>
             </div>
           </div>
@@ -198,6 +198,8 @@ const stats = ref<Statistics>({
   averageResponseTime: 0,
   responseRate: 0
 })
+
+// Remove mock data - all data comes from API
 
 const isOperator = computed(() => authStore.isOperator)
 
@@ -335,6 +337,14 @@ onMounted(() => {
 
     &.error {
       color: $error;
+    }
+
+    &.warning {
+      color: $warning;
+    }
+
+    &.info {
+      color: $info;
     }
 
     i {

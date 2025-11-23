@@ -20,8 +20,14 @@
         <h3 v-if="!isCollapsed" class="nav-section-title">Atendimento</h3>
         <ul class="nav-list">
           <li>
+            <router-link to="/dashboard" class="nav-link">
+              <i class="fas fa-chart-pie"></i>
+              <span v-if="!isCollapsed">Dashboard</span>
+            </router-link>
+          </li>
+          <li>
             <router-link to="/conversas" class="nav-link">
-              <i class="fas fa-comment-dots"></i>
+              <i class="fas fa-message"></i>
               <span v-if="!isCollapsed">Conversas</span>
               <span v-if="!isCollapsed && unreadCount" class="badge badge-primary">{{ unreadCount }}</span>
             </router-link>
