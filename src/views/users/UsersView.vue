@@ -140,6 +140,14 @@ onMounted(() => {
 .page-header {
   @include flex-between;
   margin-bottom: $spacing-xl;
+
+  h2 {
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
 }
 
 .data-table {
@@ -150,7 +158,7 @@ onMounted(() => {
     background: $surface-light;
 
     .dark & {
-      background: $background-dark;
+      background: $surface-dark;
     }
 
     th {
@@ -158,17 +166,36 @@ onMounted(() => {
       text-align: left;
       font-weight: 600;
       font-size: 0.875rem;
+      color: $text-primary-light;
+
+      .dark & {
+        color: $text-primary-dark;
+      }
     }
   }
 
   tbody {
+    tr {
+      transition: background $transition-fast;
+
+      &:hover {
+        background: rgba($primary-light, 0.05);
+
+        .dark & {
+          background: rgba($primary-light, 0.1);
+        }
+      }
+    }
+
     td {
       padding: $spacing-md $spacing-lg;
       font-size: 0.875rem;
       border-top: 1px solid $border-light;
+      color: $text-primary-light;
 
       .dark & {
         border-color: $border-dark;
+        color: $text-primary-dark;
       }
     }
   }
@@ -187,6 +214,89 @@ onMounted(() => {
 
   &:hover {
     color: $primary-light;
+  }
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  @include flex-center;
+  z-index: 1000;
+}
+
+.modal {
+  background: $background-light;
+  border-radius: $radius-lg;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: $shadow-xl;
+
+  .dark & {
+    background: $surface-dark;
+  }
+}
+
+.modal-header {
+  @include flex-between;
+  padding: $spacing-lg;
+  border-bottom: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+}
+
+.modal-body {
+  padding: $spacing-lg;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-md;
+  padding: $spacing-lg;
+  border-top: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-md;
+
+  label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+
+  input,
+  select {
+    @include input-base;
   }
 }
 </style>
