@@ -4,9 +4,14 @@
     <div class="conversations-sidebar">
       <div class="sidebar-header">
         <h3>Conversas</h3>
-        <button @click="loadConversations" class="icon-btn" title="Atualizar">
-          <i class="fas fa-sync-alt"></i>
-        </button>
+        <div class="header-actions">
+          <button @click="showNewMessageModal = true" class="icon-btn" title="Nova Mensagem">
+            <i class="fas fa-plus"></i>
+          </button>
+          <button @click="loadConversations" class="icon-btn" title="Atualizar">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
       </div>
 
       <div class="search-box">
@@ -132,6 +137,54 @@
       </div>
     </div>
 
+    <!-- New Message Modal -->
+    <div v-if="showNewMessageModal" class="modal-overlay" @click="showNewMessageModal = false">
+      <div class="modal modal-sm" @click.stop>
+        <div class="modal-header">
+          <h3>Nova Mensagem</h3>
+          <button @click="showNewMessageModal = false" class="icon-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Instância</label>
+            <select v-model="newMessageInstanceId" :disabled="sendingMessage">
+              <option value="">Selecione...</option>
+              <option v-for="instance in instances" :key="instance.id" :value="instance.id">
+                {{ instance.name }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Contato</label>
+            <select v-model="newMessageContactId" :disabled="!newMessageInstanceId || sendingMessage">
+              <option value="">Selecione...</option>
+              <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
+                {{ contact.name }} - {{ formatPhone(contact.phone) }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Mensagem</label>
+            <textarea 
+              v-model="newMessageContent" 
+              placeholder="Digite sua mensagem..."
+              rows="3"
+              :disabled="!newMessageContactId || sendingMessage"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showNewMessageModal = false" class="btn-secondary" :disabled="sendingMessage">Cancelar</button>
+          <button @click="sendNewMessage" class="btn-primary" :disabled="!canSendNewMessage || sendingMessage">
+            <i class="fas fa-paper-plane"></i>
+            {{ sendingMessage ? 'Enviando...' : 'Enviar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Close Modal -->
     <div v-if="showCloseModal" class="modal-overlay" @click="showCloseModal = false">
       <div class="modal" @click.stop>
@@ -167,8 +220,10 @@ import { useConversationStore } from '@/stores/conversation.store'
 import { userService } from '@/services/user.service'
 import { tabulationService } from '@/services/tabulation.service'
 import { conversationService } from '@/services/conversation.service'
+import { serviceInstanceService } from '@/services/service-instance.service'
+import { contactService } from '@/services/contact.service'
 import { wsService } from '@/services/websocket.service'
-import type { User, Tabulation } from '@/types'
+import type { User, Tabulation, ServiceInstance, Contact } from '@/types'
 
 const conversationStore = useConversationStore()
 
@@ -183,8 +238,17 @@ const tabulations = ref<Tabulation[]>([])
 
 const showTransferModal = ref(false)
 const showCloseModal = ref(false)
+const showNewMessageModal = ref(false)
 const selectedOperatorId = ref('')
 const selectedTabulationId = ref('')
+
+// New message modal state
+const instances = ref<ServiceInstance[]>([])
+const contacts = ref<Contact[]>([])
+const newMessageInstanceId = ref('')
+const newMessageContactId = ref('')
+const newMessageContent = ref('')
+const sendingMessage = ref(false)
 
 const conversations = computed(() => conversationStore.conversations)
 const activeConversation = computed(() => conversationStore.activeConversation)
@@ -234,6 +298,96 @@ const transferConversation = async () => {
   } catch (error) {
     console.error('Erro ao transferir conversa:', error)
     alert('Erro ao transferir conversa')
+  }
+}
+
+const canSendNewMessage = computed(() => {
+  return !!newMessageInstanceId.value && 
+         !!newMessageContactId.value && 
+         newMessageContent.value.trim().length > 0
+})
+
+const loadInstances = async () => {
+  try {
+    const response = await serviceInstanceService.getInstances(1, 100)
+    instances.value = response.data.filter(i => i.isActive)
+  } catch (error) {
+    console.error('Erro ao carregar instâncias:', error)
+  }
+}
+
+const loadContacts = async () => {
+  if (!newMessageInstanceId.value) {
+    contacts.value = []
+    return
+  }
+  try {
+    const response = await contactService.getContacts(1, 100)
+    contacts.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar contatos:', error)
+  }
+}
+
+watch(newMessageInstanceId, () => {
+  newMessageContactId.value = ''
+  newMessageContent.value = ''
+  loadContacts()
+})
+
+watch(showNewMessageModal, (show) => {
+  if (show) {
+    loadInstances()
+    newMessageInstanceId.value = ''
+    newMessageContactId.value = ''
+    newMessageContent.value = ''
+  }
+})
+
+const sendNewMessage = async () => {
+  if (!canSendNewMessage.value) return
+  
+  sendingMessage.value = true
+  try {
+    // Ensure WebSocket is connected
+    if (!wsService.isConnected()) {
+      wsService.connect()
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+
+    // Find or create conversation
+    let conversation = conversations.value.find(
+      c => c.contact?.id === newMessageContactId.value && 
+           c.serviceInstance?.id === newMessageInstanceId.value
+    )
+    
+    if (!conversation) {
+      conversation = await conversationService.createConversation({
+        contactId: newMessageContactId.value,
+        serviceInstanceId: newMessageInstanceId.value
+      })
+      await loadConversations()
+    }
+
+    // Join room and send message
+    wsService.joinRoom(conversation.id)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    wsService.sendMessage(conversation.id, newMessageContent.value.trim())
+    
+    // Close modal and select conversation
+    showNewMessageModal.value = false
+    await selectConversation(conversation.id)
+    
+    // Clear form
+    newMessageInstanceId.value = ''
+    newMessageContactId.value = ''
+    newMessageContent.value = ''
+  } catch (error: any) {
+    console.error('Erro ao enviar mensagem:', error)
+    alert(error.response?.data?.message || 'Erro ao enviar mensagem')
+  } finally {
+    sendingMessage.value = false
   }
 }
 
@@ -354,6 +508,16 @@ onUnmounted(() => {
   h3 {
     font-size: 1.125rem;
     font-weight: 600;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-xs;
   }
 }
 
@@ -659,6 +823,100 @@ onUnmounted(() => {
 
   &:hover {
     color: $primary-light;
+  }
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  @include flex-center;
+  z-index: 1000;
+}
+
+.modal {
+  background: $background-light;
+  border-radius: $radius-lg;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: $shadow-xl;
+
+  .dark & {
+    background: $surface-dark;
+  }
+
+  &.modal-sm {
+    max-width: 400px;
+  }
+}
+
+.modal-header {
+  @include flex-between;
+  padding: $spacing-lg;
+  border-bottom: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+}
+
+.modal-body {
+  padding: $spacing-lg;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-md;
+  padding: $spacing-lg;
+  border-top: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+
+  label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+
+  select,
+  textarea {
+    @include input-base;
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 80px;
   }
 }
 </style>
