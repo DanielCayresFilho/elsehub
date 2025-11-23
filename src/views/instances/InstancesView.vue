@@ -137,17 +137,31 @@ const createInstance = async () => {
       return
     }
 
+    // Normalize baseUrl (remove trailing slash if present)
+    let baseUrl = form.value.credentials.baseUrl.trim()
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.slice(0, -1)
+    }
+
+    // Validate URL format
+    try {
+      new URL(baseUrl)
+    } catch (e) {
+      alert('Base URL inválida. Use o formato: https://seu-servidor.com')
+      return
+    }
+
     const payload = {
       name: form.value.name.trim(),
       provider: ServiceProvider.EVOLUTION_API,
       credentials: {
         apiKey: form.value.credentials.apiKey.trim(),
-        baseUrl: form.value.credentials.baseUrl.trim(),
+        baseUrl: baseUrl,
         instanceName: form.value.credentials.instanceName.trim()
       }
     }
 
-    console.log('Criando instância com payload:', payload)
+    console.log('Criando instância com payload:', JSON.stringify(payload, null, 2))
     await serviceInstanceService.createInstance(payload)
     showModal.value = false
     form.value = {
@@ -164,7 +178,41 @@ const createInstance = async () => {
     
     if (error.response?.data) {
       const data = error.response.data
-      if (data.message) {
+      
+      // Handle nested message object (NestJS validation format)
+      if (data.message && typeof data.message === 'object') {
+        const messageObj = data.message
+        const errors: string[] = []
+        
+        // Extract validation errors from message object
+        if (Array.isArray(messageObj)) {
+          errors.push(...messageObj.map((m: any) => typeof m === 'string' ? m : JSON.stringify(m)))
+        } else {
+          // Extract all error messages from object
+          Object.keys(messageObj).forEach(key => {
+            const value = messageObj[key]
+            if (Array.isArray(value)) {
+              value.forEach((v: any) => {
+                if (typeof v === 'string') {
+                  errors.push(`${key}: ${v}`)
+                } else {
+                  errors.push(`${key}: ${JSON.stringify(v)}`)
+                }
+              })
+            } else if (typeof value === 'string') {
+              errors.push(`${key}: ${value}`)
+            } else {
+              errors.push(`${key}: ${JSON.stringify(value)}`)
+            }
+          })
+        }
+        
+        if (errors.length > 0) {
+          errorMessage = errors.join('\n')
+        } else {
+          errorMessage = JSON.stringify(messageObj, null, 2)
+        }
+      } else if (data.message && typeof data.message === 'string') {
         errorMessage = data.message
       } else if (data.error) {
         errorMessage = data.error
@@ -175,13 +223,15 @@ const createInstance = async () => {
         const errors = Object.values(data).flat()
         if (errors.length > 0) {
           errorMessage = errors.join(', ')
+        } else {
+          errorMessage = JSON.stringify(data, null, 2)
         }
       }
     } else if (error.message) {
       errorMessage = error.message
     }
     
-    alert(errorMessage)
+    alert(`Erro ao criar instância:\n\n${errorMessage}`)
   }
 }
 
