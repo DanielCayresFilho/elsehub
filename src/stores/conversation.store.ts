@@ -4,6 +4,7 @@ import type { Conversation, Message } from '@/types'
 import { conversationService } from '@/services/conversation.service'
 import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
+import { api } from '@/services/api'
 
 export const useConversationStore = defineStore('conversation', () => {
   const conversations = ref<Conversation[]>([])
@@ -25,37 +26,75 @@ export const useConversationStore = defineStore('conversation', () => {
 
   async function selectConversation(conversationId: string) {
     try {
+      console.log('Selecionando conversa:', conversationId)
+      
       const conversation = await conversationService.getConversation(conversationId)
       activeConversation.value = conversation
+      
+      console.log('Conversa carregada:', conversation)
+      console.log('Mensagens no objeto:', conversation.messages?.length || 0)
+      
+      // Limpa mensagens anteriores
+      messages.value = []
       
       // Tenta carregar mensagens da conversa
       // Primeiro verifica se vem no objeto da conversa
       if (conversation.messages && conversation.messages.length > 0) {
+        console.log('Carregando mensagens do objeto da conversa')
         messages.value = conversation.messages
       } else {
         // Se não vier, tenta buscar via endpoint de mensagens
+        console.log('Tentando buscar mensagens via endpoint...')
         try {
           const messagesResponse = await messageService.getMessages(conversationId, 1, 100)
+          console.log('Mensagens recebidas do endpoint:', messagesResponse.data?.length || 0)
           messages.value = messagesResponse.data || []
-        } catch (msgError) {
-          // Se o endpoint não existir, deixa vazio e espera WebSocket
-          console.warn('Endpoint de mensagens não disponível, usando WebSocket:', msgError)
-          messages.value = []
+        } catch (msgError: any) {
+          // Se o endpoint não existir (404), tenta endpoint alternativo
+          console.warn('Endpoint /conversations/:id/messages não disponível, tentando alternativas:', msgError)
+          
+          // Tenta endpoint alternativo: GET /api/messages?conversationId=...
+          try {
+            const { data } = await api.get<Message[] | { data: Message[] }>(`/messages`, {
+              params: { conversationId, page: 1, limit: 100 }
+            })
+            console.log('Mensagens recebidas do endpoint alternativo:', data)
+            // Pode retornar array direto ou objeto com data
+            if (Array.isArray(data)) {
+              messages.value = data
+            } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+              messages.value = data.data
+            } else {
+              messages.value = []
+            }
+            console.log('Mensagens processadas:', messages.value.length)
+          } catch (altError: any) {
+            console.warn('Nenhum endpoint de mensagens disponível, usando apenas WebSocket:', altError)
+            console.warn('Erro detalhado:', {
+              status: altError.response?.status,
+              message: altError.response?.data?.message || altError.message,
+              url: altError.config?.url
+            })
+            messages.value = []
+          }
         }
       }
       
       // Ordena mensagens por data (mais antigas primeiro)
-      messages.value.sort((a, b) => {
-        const dateA = new Date(a.timestamp || a.createdAt).getTime()
-        const dateB = new Date(b.timestamp || b.createdAt).getTime()
-        return dateA - dateB
-      })
+      if (messages.value.length > 0) {
+        messages.value.sort((a, b) => {
+          const dateA = new Date(a.timestamp || a.createdAt).getTime()
+          const dateB = new Date(b.timestamp || b.createdAt).getTime()
+          return dateA - dateB
+        })
+      }
       
       // Join WebSocket room para receber mensagens em tempo real
       wsService.joinRoom(conversationId)
       
       console.log('Conversa selecionada:', conversation)
-      console.log('Mensagens carregadas:', messages.value.length)
+      console.log('Total de mensagens carregadas:', messages.value.length)
+      console.log('Mensagens:', messages.value)
     } catch (error) {
       console.error('Erro ao selecionar conversa:', error)
       throw error
@@ -63,6 +102,8 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function addMessage(message: Message) {
+    console.log('Adicionando mensagem ao store:', message)
+    
     // Evitar duplicatas
     const exists = messages.value.find(m => m.id === message.id)
     if (exists) {
@@ -70,17 +111,26 @@ export const useConversationStore = defineStore('conversation', () => {
       const index = messages.value.findIndex(m => m.id === message.id)
       if (index !== -1) {
         messages.value[index] = { ...messages.value[index], ...message }
+        console.log('Mensagem atualizada:', messages.value[index])
       }
       return
     }
     
+    // Verifica se é da conversa ativa
     if (activeConversation.value?.id === message.conversationId) {
+      console.log('Adicionando mensagem à lista (conversa ativa)')
       messages.value.push(message)
       // Ordena após adicionar (mais antigas primeiro)
       messages.value.sort((a, b) => {
         const dateA = new Date(a.timestamp || a.createdAt).getTime()
         const dateB = new Date(b.timestamp || b.createdAt).getTime()
         return dateA - dateB
+      })
+      console.log('Total de mensagens após adicionar:', messages.value.length)
+    } else {
+      console.log('Mensagem ignorada (não é da conversa ativa):', {
+        messageConversationId: message.conversationId,
+        activeConversationId: activeConversation.value?.id
       })
     }
     
@@ -113,9 +163,13 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function setupWebSocketListeners() {
+    console.log('Configurando listeners do WebSocket...')
+    
     // Escuta evento message:new conforme documentação
     wsService.on('message:new', (message: Message) => {
-      console.log('Nova mensagem recebida via WebSocket:', message)
+      console.log('🔔 Nova mensagem recebida via WebSocket:', message)
+      console.log('Conversa ativa:', activeConversation.value?.id)
+      console.log('Conversa da mensagem:', message.conversationId)
       addMessage(message)
     })
 

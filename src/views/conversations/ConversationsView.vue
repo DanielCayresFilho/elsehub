@@ -345,13 +345,18 @@ const loadConversations = async () => {
 const selectConversation = async (id: string) => {
   activeConversationId.value = id
   try {
+    console.log('Selecionando conversa na view:', id)
     await conversationStore.selectConversation(id)
+    
     // Força scroll após carregar mensagens
     await nextTick()
     scrollToBottom()
+    
+    // Log para debug
+    console.log('Mensagens após selecionar:', conversationStore.messages.length)
   } catch (error) {
     console.error('Erro ao selecionar conversa:', error)
-    alert('Erro ao carregar conversa')
+    alert('Erro ao carregar conversa. Verifique o console para mais detalhes.')
   }
 }
 
@@ -652,6 +657,16 @@ onMounted(() => {
   loadConversations()
   loadOperatorsAndTabulations()
   conversationStore.setupWebSocketListeners()
+  
+  // Log para debug
+  console.log('ConversationsView montado')
+  console.log('WebSocket conectado?', wsService.isConnected())
+  
+  // Verifica se WebSocket está conectado, se não, tenta conectar
+  if (!wsService.isConnected()) {
+    console.log('WebSocket não conectado, tentando conectar...')
+    wsService.connect()
+  }
 })
 
 onUnmounted(() => {
