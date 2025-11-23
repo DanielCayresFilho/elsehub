@@ -1,11 +1,56 @@
 import { io, Socket } from 'socket.io-client'
 import type { Message, Conversation } from '@/types'
+import { authService } from './auth.service'
 
 class WebSocketService {
   private socket: Socket | null = null
   private listeners: Map<string, Set<Function>> = new Map()
 
-  connect() {
+  // ✅ Verifica se o token JWT está expirado (conforme documentação)
+  private isTokenExpired(token: string, marginMinutes = 5): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const exp = payload.exp * 1000
+      const margin = marginMinutes * 60 * 1000
+      return Date.now() >= (exp - margin)
+    } catch {
+      return true
+    }
+  }
+
+  // ✅ Renova token se necessário antes de conectar
+  private async ensureValidToken(): Promise<string | null> {
+    const token = localStorage.getItem('accessToken')
+    const refreshToken = localStorage.getItem('refreshToken')
+    
+    if (!token) {
+      console.error('No access token found for WebSocket connection')
+      return null
+    }
+    
+    // Verifica se token está expirado
+    if (this.isTokenExpired(token)) {
+      console.warn('⚠️ Token JWT expirado, tentando renovar...')
+      
+      if (!refreshToken) {
+        console.error('No refresh token found')
+        return null
+      }
+      
+      try {
+        const response = await authService.refreshToken(refreshToken)
+        console.log('✅ Token renovado com sucesso')
+        return response.accessToken
+      } catch (error) {
+        console.error('❌ Erro ao renovar token:', error)
+        return null
+      }
+    }
+    
+    return token
+  }
+
+  async connect() {
     // Se já está conectado, não reconecta
     if (this.socket?.connected) {
       console.log('WebSocket já está conectado')
@@ -20,9 +65,10 @@ class WebSocketService {
       this.socket = null
     }
 
-    const token = localStorage.getItem('accessToken')
+    // ✅ Verifica e renova token antes de conectar (conforme documentação)
+    const token = await this.ensureValidToken()
     if (!token) {
-      console.error('No access token found for WebSocket connection')
+      console.error('No valid token available for WebSocket connection')
       return
     }
 
@@ -103,6 +149,16 @@ class WebSocketService {
       }
     })
     
+    // ✅ Tratar erro TOKEN_EXPIRED conforme documentação
+    this.socket.on('error', (error: any) => {
+      console.error('❌ WebSocket error:', error)
+      
+      if (error.type === 'TOKEN_EXPIRED' || error.message?.includes('TOKEN_EXPIRED')) {
+        console.warn('⚠️ Token expirado, tentando renovar e reconectar...')
+        this.handleTokenExpired()
+      }
+    })
+    
     this.socket.on('reconnect', (attemptNumber: number) => {
       console.log('🔄 WebSocket reconectado após', attemptNumber, 'tentativas')
     })
@@ -114,6 +170,14 @@ class WebSocketService {
     // Eventos do servidor conforme documentação
     this.socket.on('message:new', (message: Message) => {
       console.log('📨 WebSocket recebeu evento message:new:', message)
+      console.log('📨 Detalhes da mensagem:', {
+        id: message.id,
+        conversationId: message.conversationId,
+        direction: message.direction,
+        content: message.content?.substring(0, 50),
+        senderName: message.senderName,
+        fromMe: (message as any).fromMe
+      })
       this.emit('message:new', message)
     })
 
@@ -133,10 +197,6 @@ class WebSocketService {
 
     this.socket.on('conversationAssigned', (conversation: Conversation) => {
       this.emit('conversation:updated', conversation)
-    })
-
-    this.socket.on('error', (error: any) => {
-      console.error('WebSocket error:', error)
     })
 
     // Escutar indicador de digitação (opcional)

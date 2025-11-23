@@ -11,6 +11,17 @@ export const useConversationStore = defineStore('conversation', () => {
   const activeConversation = ref<Conversation | null>(null)
   const messages = ref<Message[]>([])
   const loading = ref(false)
+  
+  // Função para atualizar mensagens diretamente (usado pelo polling)
+  function setMessages(newMessages: Message[]) {
+    messages.value = newMessages
+    // Ordena mensagens por data (mais antigas primeiro)
+    messages.value.sort((a, b) => {
+      const dateA = new Date(a.timestamp || a.createdAt).getTime()
+      const dateB = new Date(b.timestamp || b.createdAt).getTime()
+      return dateA - dateB
+    })
+  }
 
   async function loadConversations() {
     loading.value = true
@@ -55,10 +66,10 @@ export const useConversationStore = defineStore('conversation', () => {
           // Se não vier, tenta buscar via endpoint de mensagens
           console.log('Tentando buscar mensagens via endpoint...')
           try {
-            const messagesResponse = await messageService.getMessages(conversationId, 1, 100)
-            console.log('Mensagens recebidas do endpoint:', messagesResponse.data?.length || 0)
-            // O endpoint retorna { data: [...], meta: {...} }
-            messages.value = messagesResponse.data || []
+            // ✅ Conforme documentação: retorna array direto
+            const messagesArray = await messageService.getMessages(conversationId, 1, 100)
+            console.log('Mensagens recebidas do endpoint:', messagesArray.length)
+            messages.value = messagesArray
           } catch (msgError: any) {
             // Se o endpoint não existir (404), preserva mensagens existentes se for a mesma conversa
             console.warn('Endpoint de mensagens não disponível. Usando apenas WebSocket para receber mensagens em tempo real.')
@@ -112,23 +123,28 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function addMessage(message: Message) {
-    console.log('Adicionando mensagem ao store:', message)
+    console.log('📝 Adicionando mensagem ao store:', message)
+    console.log('📝 Direção da mensagem:', message.direction)
+    console.log('📝 fromMe:', (message as any).fromMe)
+    console.log('📝 senderId:', message.senderId)
+    console.log('📝 senderName:', message.senderName)
     
     // Evitar duplicatas
     const exists = messages.value.find(m => m.id === message.id)
     if (exists) {
+      console.log('⚠️ Mensagem já existe, atualizando...')
       // Atualiza mensagem existente se necessário (ex: status mudou)
       const index = messages.value.findIndex(m => m.id === message.id)
       if (index !== -1) {
         messages.value[index] = { ...messages.value[index], ...message }
-        console.log('Mensagem atualizada:', messages.value[index])
+        console.log('✅ Mensagem atualizada:', messages.value[index])
       }
       return
     }
     
     // Verifica se é da conversa ativa
     if (activeConversation.value?.id === message.conversationId) {
-      console.log('Adicionando mensagem à lista (conversa ativa)')
+      console.log('✅ Adicionando mensagem à lista (conversa ativa)')
       messages.value.push(message)
       // Ordena após adicionar (mais antigas primeiro)
       messages.value.sort((a, b) => {
@@ -136,9 +152,14 @@ export const useConversationStore = defineStore('conversation', () => {
         const dateB = new Date(b.timestamp || b.createdAt).getTime()
         return dateA - dateB
       })
-      console.log('Total de mensagens após adicionar:', messages.value.length)
+      console.log('✅ Total de mensagens após adicionar:', messages.value.length)
+      console.log('✅ Últimas 3 mensagens:', messages.value.slice(-3).map(m => ({
+        id: m.id,
+        direction: m.direction,
+        content: m.content?.substring(0, 30)
+      })))
     } else {
-      console.log('Mensagem ignorada (não é da conversa ativa):', {
+      console.log('⚠️ Mensagem ignorada (não é da conversa ativa):', {
         messageConversationId: message.conversationId,
         activeConversationId: activeConversation.value?.id
       })
@@ -178,8 +199,17 @@ export const useConversationStore = defineStore('conversation', () => {
     // Escuta evento message:new conforme documentação
     wsService.on('message:new', (message: Message) => {
       console.log('🔔 Nova mensagem recebida via WebSocket:', message)
+      console.log('🔔 Detalhes:', {
+        id: message.id,
+        conversationId: message.conversationId,
+        direction: message.direction,
+        content: message.content?.substring(0, 50),
+        senderName: message.senderName,
+        fromMe: (message as any).fromMe
+      })
       console.log('Conversa ativa:', activeConversation.value?.id)
       console.log('Conversa da mensagem:', message.conversationId)
+      console.log('É da conversa ativa?', activeConversation.value?.id === message.conversationId)
       addMessage(message)
     })
 
@@ -235,7 +265,8 @@ export const useConversationStore = defineStore('conversation', () => {
     addMessage,
     addConversation,
     closeConversation,
-    setupWebSocketListeners
+    setupWebSocketListeners,
+    setMessages
   }
 })
 

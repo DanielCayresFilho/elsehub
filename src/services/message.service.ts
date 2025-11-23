@@ -7,18 +7,40 @@ interface SendMessageRequest {
 }
 
 export const messageService = {
+  // ✅ Conforme documentação: POST /api/messages
   async sendMessage(conversationId: string, content: string): Promise<Message> {
     const payload: SendMessageRequest = { conversationId, content }
-    const { data } = await api.post<Message>('/messages/send', payload)
-    return data
+    // Tenta primeiro /api/messages, se não funcionar tenta /api/messages/send
+    try {
+      const { data } = await api.post<Message>('/messages', payload)
+      return data
+    } catch (error: any) {
+      // Fallback para endpoint antigo
+      if (error.response?.status === 404) {
+        const { data } = await api.post<Message>('/messages/send', payload)
+        return data
+      }
+      throw error
+    }
   },
 
-  async getMessages(conversationId: string, page = 1, limit = 100): Promise<PaginatedResponse<Message>> {
-    // ✅ CORRETO: Usa o endpoint correto conforme documentação
-    // GET /api/messages/conversation/:conversationId
-    const { data } = await api.get<PaginatedResponse<Message>>(`/messages/conversation/${conversationId}`, {
+  // ✅ Conforme documentação: GET /api/messages/conversation/:conversationId
+  // Retorna array direto, não paginado
+  async getMessages(conversationId: string, page = 1, limit = 100): Promise<Message[]> {
+    const { data } = await api.get<Message[] | PaginatedResponse<Message>>(`/messages/conversation/${conversationId}`, {
       params: { page, limit }
     })
-    return data
+    
+    // Se retornar array direto, retorna
+    if (Array.isArray(data)) {
+      return data
+    }
+    
+    // Se retornar objeto paginado, retorna data
+    if (data && typeof data === 'object' && 'data' in data) {
+      return (data as PaginatedResponse<Message>).data
+    }
+    
+    return []
   }
 }

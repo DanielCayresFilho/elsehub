@@ -647,6 +647,55 @@ watch(messages, () => {
   scrollToBottom()
 })
 
+// Polling como fallback quando WebSocket não funciona
+let messagePollInterval: ReturnType<typeof setInterval> | null = null
+
+const startMessagePolling = () => {
+  // Limpa intervalo anterior se existir
+  if (messagePollInterval) {
+    clearInterval(messagePollInterval)
+  }
+  
+  // Polling a cada 3 segundos quando há conversa ativa
+  messagePollInterval = setInterval(async () => {
+    if (activeConversationId.value) {
+      try {
+        // Busca mensagens da conversa ativa
+        // ✅ Conforme documentação: retorna array direto
+        const newMessages = await messageService.getMessages(activeConversationId.value, 1, 100)
+        const currentCount = messages.value.length
+        
+        // Atualiza mensagens se houver novas
+        if (newMessages.length > currentCount) {
+          console.log('🔄 Polling: Novas mensagens encontradas', newMessages.length - currentCount)
+          // Atualiza o store com as mensagens mais recentes
+          conversationStore.setMessages(newMessages)
+        }
+      } catch (error) {
+        console.error('Erro ao fazer polling de mensagens:', error)
+      }
+    }
+  }, 3000) // Poll a cada 3 segundos
+}
+
+const stopMessagePolling = () => {
+  if (messagePollInterval) {
+    clearInterval(messagePollInterval)
+    messagePollInterval = null
+  }
+}
+
+// Observa mudanças na conversa ativa para iniciar/parar polling
+watch(activeConversationId, (newId) => {
+  if (newId) {
+    console.log('🔄 Iniciando polling de mensagens para conversa:', newId)
+    startMessagePolling()
+  } else {
+    console.log('🛑 Parando polling de mensagens')
+    stopMessagePolling()
+  }
+})
+
 onMounted(() => {
   loadConversations()
   loadOperatorsAndTabulations()
@@ -661,9 +710,17 @@ onMounted(() => {
     console.log('WebSocket não conectado, tentando conectar...')
     wsService.connect()
   }
+  
+  // Inicia polling se já houver conversa ativa
+  if (activeConversationId.value) {
+    startMessagePolling()
+  }
 })
 
 onUnmounted(() => {
+  // Para polling
+  stopMessagePolling()
+  
   // Para indicador de digitação
   if (typingTimeout.value) {
     clearTimeout(typingTimeout.value)
