@@ -65,10 +65,23 @@ export const useConversationStore = defineStore('conversation', () => {
   function addMessage(message: Message) {
     // Evitar duplicatas
     const exists = messages.value.find(m => m.id === message.id)
-    if (exists) return
+    if (exists) {
+      // Atualiza mensagem existente se necessário (ex: status mudou)
+      const index = messages.value.findIndex(m => m.id === message.id)
+      if (index !== -1) {
+        messages.value[index] = { ...messages.value[index], ...message }
+      }
+      return
+    }
     
     if (activeConversation.value?.id === message.conversationId) {
       messages.value.push(message)
+      // Ordena após adicionar (mais antigas primeiro)
+      messages.value.sort((a, b) => {
+        const dateA = new Date(a.timestamp || a.createdAt).getTime()
+        const dateB = new Date(b.timestamp || b.createdAt).getTime()
+        return dateA - dateB
+      })
     }
     
     // Update conversation list
@@ -125,11 +138,14 @@ export const useConversationStore = defineStore('conversation', () => {
       }
     })
 
-    wsService.on('conversation:closed', (conversation: Conversation) => {
-      console.log('Conversa fechada via WebSocket:', conversation)
+    wsService.on('conversation:closed', (data: { conversationId: string } | Conversation) => {
+      console.log('Conversa fechada via WebSocket:', data)
+      // O payload pode ser { conversationId } ou Conversation completo
+      const conversationId = 'conversationId' in data ? data.conversationId : data.id
+      
       // Remove da lista de conversas abertas
-      conversations.value = conversations.value.filter(c => c.id !== conversation.id)
-      if (activeConversation.value?.id === conversation.id) {
+      conversations.value = conversations.value.filter(c => c.id !== conversationId)
+      if (activeConversation.value?.id === conversationId) {
         activeConversation.value = null
         messages.value = []
       }

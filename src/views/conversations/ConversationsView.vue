@@ -105,6 +105,7 @@
             type="text" 
             placeholder="Digite sua mensagem..."
             @keyup.enter="sendMessage"
+            @input="handleTyping"
           />
           <button @click="sendMessage" class="send-btn" :disabled="!newMessage.trim()">
             <i class="fas fa-paper-plane"></i>
@@ -287,6 +288,8 @@ const loading = ref(false)
 const searchQuery = ref('')
 const newMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
+const typingTimeout = ref<NodeJS.Timeout | null>(null)
+const isTyping = ref(false)
 
 const activeConversationId = ref<string | null>(null)
 const onlineOperators = ref<User[]>([])
@@ -352,8 +355,41 @@ const selectConversation = async (id: string) => {
   }
 }
 
+const handleTyping = () => {
+  if (!activeConversationId.value) return
+  
+  // Para de indicar digitação anterior
+  if (typingTimeout.value) {
+    clearTimeout(typingTimeout.value)
+  }
+  
+  // Indica que está digitando
+  if (!isTyping.value) {
+    isTyping.value = true
+    wsService.sendTypingStart(activeConversationId.value)
+  }
+  
+  // Para de indicar após 1 segundo sem digitar
+  typingTimeout.value = setTimeout(() => {
+    if (isTyping.value) {
+      isTyping.value = false
+      wsService.sendTypingStop(activeConversationId.value)
+    }
+  }, 1000)
+}
+
 const sendMessage = async () => {
   if (!newMessage.value.trim() || !activeConversationId.value) return
+  
+  // Para indicador de digitação
+  if (typingTimeout.value) {
+    clearTimeout(typingTimeout.value)
+    typingTimeout.value = null
+  }
+  if (isTyping.value) {
+    isTyping.value = false
+    wsService.sendTypingStop(activeConversationId.value)
+  }
   
   const messageContent = newMessage.value.trim()
   newMessage.value = ''
@@ -619,6 +655,15 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // Para indicador de digitação
+  if (typingTimeout.value) {
+    clearTimeout(typingTimeout.value)
+  }
+  if (isTyping.value && activeConversationId.value) {
+    wsService.sendTypingStop(activeConversationId.value)
+  }
+  
+  // Sair da sala da conversa
   if (activeConversationId.value) {
     wsService.leaveRoom(activeConversationId.value)
   }

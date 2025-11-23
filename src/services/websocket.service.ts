@@ -41,6 +41,13 @@ class WebSocketService {
 
     this.socket.on('disconnect', () => {
       console.log('❌ WebSocket desconectado')
+      // Tentar reconectar após 3 segundos (já tem reconexão automática, mas garante)
+      setTimeout(() => {
+        if (!this.socket?.connected) {
+          console.log('Tentando reconectar WebSocket...')
+          this.connect()
+        }
+      }, 3000)
     })
 
     // Eventos do servidor conforme documentação
@@ -52,8 +59,9 @@ class WebSocketService {
       this.emit('conversation:updated', conversation)
     })
 
-    this.socket.on('conversation:closed', (conversation: Conversation) => {
-      this.emit('conversation:closed', conversation)
+    this.socket.on('conversation:closed', (data: any) => {
+      // Payload pode ser { conversationId } ou Conversation completo
+      this.emit('conversation:closed', data)
     })
 
     // Mantém compatibilidade com eventos antigos
@@ -67,6 +75,20 @@ class WebSocketService {
 
     this.socket.on('error', (error: any) => {
       console.error('WebSocket error:', error)
+    })
+
+    // Escutar indicador de digitação (opcional)
+    this.socket.on('typing:user', (data: { userId: string; email: string; isTyping: boolean; conversationId: string }) => {
+      this.emit('typing:user', data)
+    })
+
+    // Escutar status de usuários (opcional)
+    this.socket.on('user:online', (data: { userId: string; email: string }) => {
+      this.emit('user:online', data)
+    })
+
+    this.socket.on('user:offline', (data: { userId: string; email: string }) => {
+      this.emit('user:offline', data)
     })
   }
 
@@ -83,6 +105,14 @@ class WebSocketService {
   sendMessage(conversationId: string, content: string) {
     // Usa o evento correto conforme documentação (opcional, pois estamos usando HTTP API)
     this.socket?.emit('message:send', { conversationId, content })
+  }
+
+  sendTypingStart(conversationId: string) {
+    this.socket?.emit('typing:start', { conversationId })
+  }
+
+  sendTypingStop(conversationId: string) {
+    this.socket?.emit('typing:stop', { conversationId })
   }
 
   on(event: string, callback: Function) {
