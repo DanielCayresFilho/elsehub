@@ -27,20 +27,33 @@ class WebSocketService {
     }
 
     // Conecta ao WebSocket conforme documentação
-    // Se VITE_WS_URL não terminar com /chat, adiciona
+    // O backend espera conexões em /chat, então precisamos configurar o path do Socket.IO
     let wsUrl = import.meta.env.VITE_WS_URL || ''
-    if (wsUrl && !wsUrl.endsWith('/chat')) {
-      wsUrl = wsUrl.replace(/\/$/, '') + '/chat'
+    
+    // Remove /chat se existir, pois vamos usar o path do Socket.IO
+    wsUrl = wsUrl.replace(/\/chat\/?$/, '')
+    
+    // Se não tiver protocolo, adiciona wss://
+    if (wsUrl && !wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
+      wsUrl = 'wss://' + wsUrl.replace(/^https?:\/\//, '')
     }
     
+    console.log('🔌 Conectando ao WebSocket:', wsUrl)
+    console.log('🔑 Token presente:', !!token, token ? token.substring(0, 20) + '...' : 'N/A')
+    console.log('📡 Path do Socket.IO: /chat/socket.io')
+    
+    // O backend está configurado para aceitar Socket.IO em /chat
+    // Então o path deve ser /chat/socket.io (não apenas /socket.io)
     this.socket = io(wsUrl, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
-      reconnectionAttempts: Infinity, // Reconecta infinitamente
+      reconnectionAttempts: Infinity,
       reconnectionDelayMax: 10000,
-      timeout: 20000
+      timeout: 20000,
+      // O backend espera Socket.IO em /chat, então o path é /chat/socket.io
+      path: '/chat/socket.io'
     })
 
     this.setupEventListeners()
@@ -50,13 +63,42 @@ class WebSocketService {
     if (!this.socket) return
 
     this.socket.on('connect', () => {
-      console.log('✅ WebSocket conectado')
+      console.log('✅ WebSocket conectado com sucesso!')
+      console.log('Socket ID:', this.socket?.id)
     })
 
     this.socket.on('disconnect', (reason: string) => {
       console.log('❌ WebSocket desconectado. Motivo:', reason)
+      
+      // Se foi desconexão do servidor (não do cliente), pode ser problema de autenticação
+      if (reason === 'io server disconnect') {
+        console.error('⚠️ Servidor desconectou o cliente. Possíveis causas:')
+        console.error('  - Token inválido ou expirado')
+        console.error('  - URL incorreta')
+        console.error('  - Servidor rejeitou a conexão')
+        
+        // Tenta reconectar com novo token após um delay
+        setTimeout(() => {
+          const newToken = localStorage.getItem('accessToken')
+          if (newToken && newToken !== token) {
+            console.log('🔄 Token atualizado, tentando reconectar...')
+            this.connect()
+          }
+        }, 3000)
+      }
+      
       // Não tenta reconectar manualmente aqui, deixa o Socket.IO fazer isso automaticamente
       // A reconexão automática já está configurada no io() com reconnectionAttempts: Infinity
+    })
+    
+    this.socket.on('connect_error', (error: any) => {
+      console.error('❌ Erro ao conectar WebSocket:', error.message)
+      console.error('Detalhes:', error)
+      
+      // Se for erro de autenticação
+      if (error.message?.includes('auth') || error.message?.includes('401')) {
+        console.error('⚠️ Erro de autenticação. Verifique o token JWT.')
+      }
     })
     
     this.socket.on('reconnect', (attemptNumber: number) => {
