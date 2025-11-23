@@ -23,9 +23,14 @@
           <p><strong>Criada em:</strong> {{ formatDate(instance.createdAt) }}</p>
         </div>
         <div class="instance-actions">
-          <button @click="showQRCode(instance.id)" class="btn-secondary">
+          <button @click="toggleActive(instance)" class="btn-toggle" :class="{ active: instance.isActive }" :title="instance.isActive ? 'Desativar' : 'Ativar'">
+            <i :class="instance.isActive ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
+          </button>
+          <button @click="editInstance(instance)" class="btn-secondary" title="Editar instância">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button @click="showQRCode(instance.id)" class="btn-secondary" title="Ver QR Code">
             <i class="fas fa-qrcode"></i>
-            QR Code
           </button>
           <button @click="deleteInstance(instance.id)" class="btn-danger" title="Deletar instância">
             <i class="fas fa-trash"></i>
@@ -34,12 +39,12 @@
       </div>
     </div>
 
-    <!-- Create Modal -->
-    <div v-if="showModal" class="modal-overlay" @click="showModal = false">
+    <!-- Create/Edit Modal -->
+    <div v-if="showModal" class="modal-overlay" @click="closeModal">
       <div class="modal" @click.stop>
         <div class="modal-header">
-          <h3>Nova Instância</h3>
-          <button @click="showModal = false" class="icon-btn" title="Fechar">
+          <h3>{{ editingInstance ? 'Editar Instância' : 'Nova Instância' }}</h3>
+          <button @click="closeModal" class="icon-btn" title="Fechar">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -49,23 +54,31 @@
               <label>Nome</label>
               <input type="text" v-model="form.name" required />
             </div>
-            <div class="form-group">
+            <div v-if="!editingInstance" class="form-group">
               <label>API Token</label>
               <input type="text" v-model="form.credentials.apiToken" required placeholder="xrgr4qjcxhZ3m5kn2Rc3DdN5qSnhS3cp" />
             </div>
-            <div class="form-group">
+            <div v-if="!editingInstance" class="form-group">
               <label>Server URL</label>
               <input type="url" v-model="form.credentials.serverUrl" required placeholder="https://evolution.covenos.com.br" />
             </div>
-            <div class="form-group">
+            <div v-if="!editingInstance" class="form-group">
               <label>Nome da Instância</label>
               <input type="text" v-model="form.credentials.instanceName" required />
+            </div>
+            <div v-if="editingInstance" class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="form.isActive" />
+                <span>Instância Ativa</span>
+              </label>
             </div>
           </form>
         </div>
         <div class="modal-footer">
-          <button @click="showModal = false" class="btn-secondary">Cancelar</button>
-          <button @click="createInstance" class="btn-primary">Criar</button>
+          <button @click="closeModal" class="btn-secondary">Cancelar</button>
+          <button @click="editingInstance ? updateInstance() : createInstance()" class="btn-primary">
+            {{ editingInstance ? 'Salvar' : 'Criar' }}
+          </button>
         </div>
       </div>
     </div>
@@ -82,9 +95,26 @@
         <div class="modal-body qr-modal-body">
           <div v-if="loadingQR" class="loading"></div>
           <div v-else-if="qrCode" class="qr-container">
-            <img v-if="qrCode.qrcode.code" :src="qrCode.qrcode.code" alt="QR Code" />
-            <div v-else>
-              <p>Instância já conectada!</p>
+            <!-- QR Code em base64 -->
+            <div v-if="qrCode.base64" class="qr-image">
+              <img :src="qrCode.base64" alt="QR Code" />
+              <p class="qr-hint">Escaneie o QR Code com o WhatsApp</p>
+            </div>
+            <!-- Código de pareamento -->
+            <div v-else-if="qrCode.pairingCode" class="qr-pairing">
+              <h4>Código de Pareamento</h4>
+              <div class="pairing-code">{{ qrCode.pairingCode }}</div>
+              <p class="qr-hint">Use este código para conectar a instância</p>
+            </div>
+            <!-- Já conectada -->
+            <div v-else-if="qrCode.message" class="qr-connected">
+              <i class="fas fa-check-circle"></i>
+              <p>{{ qrCode.message }}</p>
+            </div>
+            <!-- Erro ou formato desconhecido -->
+            <div v-else class="qr-error">
+              <i class="fas fa-exclamation-triangle"></i>
+              <p>Formato de resposta inesperado</p>
             </div>
           </div>
         </div>
@@ -104,6 +134,7 @@ const showModal = ref(false)
 const showQRModal = ref(false)
 const loadingQR = ref(false)
 const qrCode = ref<QRCodeResponse | null>(null)
+const editingInstance = ref<ServiceInstance | null>(null)
 
 const form = ref({
   name: '',
@@ -112,7 +143,8 @@ const form = ref({
     apiToken: '',
     serverUrl: '',
     instanceName: ''
-  }
+  },
+  isActive: true
 })
 
 const loadInstances = async () => {
@@ -170,12 +202,7 @@ const createInstance = async () => {
 
     console.log('Criando instância com payload:', JSON.stringify(payload, null, 2))
     await serviceInstanceService.createInstance(payload)
-    showModal.value = false
-    form.value = {
-      name: '',
-      provider: ServiceProvider.EVOLUTION_API,
-      credentials: { apiToken: '', serverUrl: '', instanceName: '' }
-    }
+    closeModal()
     await loadInstances()
   } catch (error: any) {
     console.error('Erro ao criar instância:', error)
@@ -245,12 +272,83 @@ const createInstance = async () => {
 const showQRCode = async (id: string) => {
   showQRModal.value = true
   loadingQR.value = true
+  qrCode.value = null
   try {
     qrCode.value = await serviceInstanceService.getQRCode(id)
-  } catch (error) {
-    alert('Erro ao carregar QR Code')
+  } catch (error: any) {
+    console.error('Erro ao carregar QR Code:', error)
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao carregar QR Code'
+    alert(`Erro ao carregar QR Code:\n\n${errorMessage}`)
+    showQRModal.value = false
   } finally {
     loadingQR.value = false
+  }
+}
+
+const editInstance = (instance: ServiceInstance) => {
+  editingInstance.value = instance
+  form.value = {
+    name: instance.name,
+    provider: instance.provider,
+    credentials: {
+      apiToken: instance.credentials.apiToken,
+      serverUrl: instance.credentials.serverUrl,
+      instanceName: instance.credentials.instanceName
+    },
+    isActive: instance.isActive
+  }
+  showModal.value = true
+}
+
+const updateInstance = async () => {
+  if (!editingInstance.value) return
+
+  try {
+    if (!form.value.name.trim()) {
+      alert('Nome é obrigatório')
+      return
+    }
+
+    const payload: any = {
+      name: form.value.name.trim()
+    }
+
+    // Se estiver editando, pode atualizar apenas nome e isActive
+    if (editingInstance.value) {
+      payload.isActive = form.value.isActive
+    }
+
+    await serviceInstanceService.updateInstance(editingInstance.value.id, payload)
+    closeModal()
+    await loadInstances()
+  } catch (error: any) {
+    console.error('Erro ao atualizar instância:', error)
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao atualizar instância'
+    alert(`Erro ao atualizar instância:\n\n${errorMessage}`)
+  }
+}
+
+const toggleActive = async (instance: ServiceInstance) => {
+  try {
+    await serviceInstanceService.updateInstance(instance.id, {
+      isActive: !instance.isActive
+    })
+    await loadInstances()
+  } catch (error: any) {
+    console.error('Erro ao alterar status:', error)
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao alterar status'
+    alert(`Erro ao alterar status:\n\n${errorMessage}`)
+  }
+}
+
+const closeModal = () => {
+  showModal.value = false
+  editingInstance.value = null
+  form.value = {
+    name: '',
+    provider: ServiceProvider.EVOLUTION_API,
+    credentials: { apiToken: '', serverUrl: '', instanceName: '' },
+    isActive: true
   }
 }
 
@@ -372,12 +470,37 @@ onMounted(() => {
     display: flex;
     gap: $spacing-sm;
     margin-top: $spacing-md;
+    flex-wrap: wrap;
+
+    button {
+      padding: $spacing-sm $spacing-md;
+      font-size: 0.875rem;
+    }
+
+    .btn-toggle {
+      background: rgba($secondary-light, 0.1);
+      color: $secondary-light;
+      border: 1px solid rgba($secondary-light, 0.3);
+
+      &.active {
+        background: rgba($success, 0.1);
+        color: $success;
+        border-color: rgba($success, 0.3);
+      }
+
+      &:hover {
+        background: rgba($secondary-light, 0.2);
+      }
+
+      &.active:hover {
+        background: rgba($success, 0.2);
+      }
+    }
 
     .btn-danger {
       background: rgba($error, 0.1);
       color: $error;
       border: 1px solid rgba($error, 0.3);
-      padding: $spacing-sm $spacing-md;
 
       &:hover {
         background: rgba($error, 0.2);
@@ -392,15 +515,83 @@ onMounted(() => {
 
   .qr-container {
     text-align: center;
+    width: 100%;
 
-    img {
-      max-width: 300px;
-      width: 100%;
+    .qr-image {
+      img {
+        max-width: 300px;
+        width: 100%;
+        border-radius: $radius-md;
+      }
+
+      .qr-hint {
+        margin-top: $spacing-md;
+        color: $text-secondary-light;
+        font-size: 0.875rem;
+
+        .dark & {
+          color: $text-secondary-dark;
+        }
+      }
     }
 
-    p {
-      font-size: 1.125rem;
-      color: $success;
+    .qr-pairing {
+      h4 {
+        color: $text-primary-light;
+        margin-bottom: $spacing-md;
+
+        .dark & {
+          color: $text-primary-dark;
+        }
+      }
+
+      .pairing-code {
+        font-size: 2rem;
+        font-weight: bold;
+        font-family: $font-family-mono;
+        color: $primary-light;
+        background: rgba($primary-light, 0.1);
+        padding: $spacing-lg;
+        border-radius: $radius-md;
+        margin: $spacing-md 0;
+        letter-spacing: 0.5rem;
+      }
+
+      .qr-hint {
+        color: $text-secondary-light;
+        font-size: 0.875rem;
+
+        .dark & {
+          color: $text-secondary-dark;
+        }
+      }
+    }
+
+    .qr-connected {
+      i {
+        font-size: 4rem;
+        color: $success;
+        margin-bottom: $spacing-md;
+      }
+
+      p {
+        font-size: 1.125rem;
+        color: $success;
+        font-weight: 500;
+      }
+    }
+
+    .qr-error {
+      i {
+        font-size: 3rem;
+        color: $warning;
+        margin-bottom: $spacing-md;
+      }
+
+      p {
+        font-size: 1rem;
+        color: $warning;
+      }
     }
   }
 }
@@ -418,6 +609,30 @@ onMounted(() => {
 
   &:hover {
     color: $primary-light;
+  }
+}
+
+.checkbox-group {
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    span {
+      color: $text-primary-light;
+      user-select: none;
+
+      .dark & {
+        color: $text-primary-dark;
+      }
+    }
   }
 }
 </style>

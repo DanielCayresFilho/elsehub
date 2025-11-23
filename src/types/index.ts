@@ -90,10 +90,9 @@ export interface ServiceInstance {
 }
 
 export interface QRCodeResponse {
-  qrcode: {
-    pairingCode?: string
-    code?: string
-  }
+  base64?: string // QR Code em base64: "data:image/png;base64,..."
+  pairingCode?: string // Código de pareamento: "12345678"
+  message?: string // Mensagem quando já conectada: "Instância já conectada"
 }
 
 // Conversation Types
