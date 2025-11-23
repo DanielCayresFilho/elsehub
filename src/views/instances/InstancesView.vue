@@ -43,12 +43,12 @@
               <input type="text" v-model="form.name" required />
             </div>
             <div class="form-group">
-              <label>API Key</label>
-              <input type="text" v-model="form.credentials.apiKey" required />
+              <label>API Token</label>
+              <input type="text" v-model="form.credentials.apiToken" required placeholder="xrgr4qjcxhZ3m5kn2Rc3DdN5qSnhS3cp" />
             </div>
             <div class="form-group">
-              <label>Base URL</label>
-              <input type="url" v-model="form.credentials.baseUrl" required />
+              <label>Server URL</label>
+              <input type="url" v-model="form.credentials.serverUrl" required placeholder="https://evolution.covenos.com.br" />
             </div>
             <div class="form-group">
               <label>Nome da Instância</label>
@@ -102,8 +102,8 @@ const form = ref({
   name: '',
   provider: ServiceProvider.EVOLUTION_API,
   credentials: {
-    apiKey: '',
-    baseUrl: '',
+    apiToken: '',
+    serverUrl: '',
     instanceName: ''
   }
 })
@@ -124,12 +124,12 @@ const createInstance = async () => {
       alert('Nome é obrigatório')
       return
     }
-    if (!form.value.credentials.apiKey.trim()) {
-      alert('API Key é obrigatória')
+    if (!form.value.credentials.apiToken.trim()) {
+      alert('API Token é obrigatório')
       return
     }
-    if (!form.value.credentials.baseUrl.trim()) {
-      alert('Base URL é obrigatória')
+    if (!form.value.credentials.serverUrl.trim()) {
+      alert('Server URL é obrigatória')
       return
     }
     if (!form.value.credentials.instanceName.trim()) {
@@ -137,17 +137,17 @@ const createInstance = async () => {
       return
     }
 
-    // Normalize baseUrl (remove trailing slash if present)
-    let baseUrl = form.value.credentials.baseUrl.trim()
-    if (baseUrl.endsWith('/')) {
-      baseUrl = baseUrl.slice(0, -1)
+    // Normalize serverUrl (remove trailing slash if present)
+    let serverUrl = form.value.credentials.serverUrl.trim()
+    if (serverUrl.endsWith('/')) {
+      serverUrl = serverUrl.slice(0, -1)
     }
 
     // Validate URL format
     try {
-      new URL(baseUrl)
+      new URL(serverUrl)
     } catch (e) {
-      alert('Base URL inválida. Use o formato: https://seu-servidor.com')
+      alert('Server URL inválida. Use o formato: https://seu-servidor.com')
       return
     }
 
@@ -155,8 +155,8 @@ const createInstance = async () => {
       name: form.value.name.trim(),
       provider: ServiceProvider.EVOLUTION_API,
       credentials: {
-        apiKey: form.value.credentials.apiKey.trim(),
-        baseUrl: baseUrl,
+        apiToken: form.value.credentials.apiToken.trim(),
+        serverUrl: serverUrl,
         instanceName: form.value.credentials.instanceName.trim()
       }
     }
@@ -167,7 +167,7 @@ const createInstance = async () => {
     form.value = {
       name: '',
       provider: ServiceProvider.EVOLUTION_API,
-      credentials: { apiKey: '', baseUrl: '', instanceName: '' }
+      credentials: { apiToken: '', serverUrl: '', instanceName: '' }
     }
     await loadInstances()
   } catch (error: any) {

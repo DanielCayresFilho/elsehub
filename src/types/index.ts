@@ -74,8 +74,8 @@ export interface CreateContactRequest {
 
 // Service Instance Types
 export interface ServiceInstanceCredentials {
-  apiKey: string
-  baseUrl: string
+  apiToken: string
+  serverUrl: string
   instanceName: string
 }
 

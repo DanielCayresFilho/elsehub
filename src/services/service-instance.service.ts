@@ -5,8 +5,8 @@ interface CreateServiceInstanceRequest {
   name: string
   provider: string
   credentials: {
-    apiKey: string
-    baseUrl: string
+    apiToken: string
+    serverUrl: string
     instanceName: string
   }
 }
