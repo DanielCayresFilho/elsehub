@@ -1346,6 +1346,7 @@ onUnmounted(() => {
 
 .message-bubble {
   max-width: 70%;
+  min-width: 200px; // Garante espaço mínimo para áudio
   padding: $spacing-sm $spacing-md;
   border-radius: $radius-lg;
   background: $surface-light;
@@ -1366,6 +1367,13 @@ onUnmounted(() => {
     font-size: 0.75rem;
     opacity: 0.7;
   }
+  
+  // Quando contém mídia, aumenta um pouco o padding
+  .message-media {
+    + .message-content {
+      margin-top: $spacing-xs;
+    }
+  }
 }
 
 .message-media {
@@ -1373,6 +1381,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: $spacing-sm;
   margin-bottom: $spacing-xs;
+  min-width: 0; // Permite que o conteúdo se ajuste
 
   .media-image {
     width: 100%;
@@ -1383,6 +1392,21 @@ onUnmounted(() => {
 
   .media-audio {
     width: 100%;
+    min-width: 250px;
+    min-height: 48px;
+    max-width: 100%;
+    outline: none;
+    
+    // Garante que os controles sejam visíveis
+    &::-webkit-media-controls-panel {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .dark & {
+      &::-webkit-media-controls-panel {
+        background-color: rgba(255, 255, 255, 0.15);
+      }
+    }
   }
 
   .media-caption {
