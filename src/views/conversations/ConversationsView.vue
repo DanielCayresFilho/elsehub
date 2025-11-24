@@ -373,6 +373,14 @@ const mediaLoadingState = ref<Record<string, boolean>>({})
 const mediaErrors = ref<Record<string, string>>({})
 const mediaRetryCount = ref<Record<string, number>>({})
 
+const resolveApiUrl = (path?: string | null) => {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${base}${normalizedPath}`
+}
+
 const activeConversationId = ref<string | null>(null)
 const onlineOperators = ref<User[]>([])
 const tabulations = ref<Tabulation[]>([])
@@ -746,9 +754,12 @@ const getConversationPreview = (conversation: Conversation) => {
 }
 
 const hasMediaSource = (message: Message) => !!(mediaUrls.value[message.id] || message.mediaPublicUrl)
-const getMediaSrc = (message: Message) => mediaUrls.value[message.id] || message.mediaPublicUrl || ''
+const getMediaSrc = (message: Message) => mediaUrls.value[message.id] || resolveApiUrl(message.mediaPublicUrl) || ''
 const isMediaExpired = (message: Message) => message.hasMedia && !hasMediaSource(message) && !message.mediaDownloadPath
-const getMediaDownloadUrl = (message: Message) => message.mediaDownloadPath || `/messages/${message.id}/media`
+const getMediaDownloadUrl = (message: Message) => {
+  if (message.mediaDownloadPath) return resolveApiUrl(message.mediaDownloadPath)
+  return `/messages/${message.id}/media`
+}
 const isMediaLoading = (messageId: string) => !!mediaLoadingState.value[messageId]
 const getMediaLabel = (message: Message) => message.mediaFileName || getMessagePreviewLabel(message)
 
@@ -769,7 +780,7 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
   }
 
   if (message.mediaPublicUrl && !force) {
-    mediaUrls.value[messageId] = message.mediaPublicUrl
+    mediaUrls.value[messageId] = resolveApiUrl(message.mediaPublicUrl)
     mediaErrors.value[messageId] = ''
     return
   }
@@ -808,7 +819,7 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
 
 const loadMedia = (message: Message, force = false) => {
   if (message.mediaPublicUrl && !force) {
-    mediaUrls.value[message.id] = message.mediaPublicUrl
+    mediaUrls.value[message.id] = resolveApiUrl(message.mediaPublicUrl)
     mediaErrors.value[message.id] = ''
     return
   }
@@ -845,7 +856,7 @@ const preloadMedia = (list: Message[]) => {
   list.forEach(message => {
     if (!message.hasMedia) return
     if (message.mediaPublicUrl) {
-      mediaUrls.value[message.id] = message.mediaPublicUrl
+      mediaUrls.value[message.id] = resolveApiUrl(message.mediaPublicUrl)
       mediaErrors.value[message.id] = ''
     } else if (message.mediaDownloadPath) {
       ensureMediaLoaded(message)
