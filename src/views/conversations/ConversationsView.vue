@@ -376,9 +376,19 @@ const mediaRetryCount = ref<Record<string, number>>({})
 const resolveApiUrl = (path?: string | null) => {
   if (!path) return ''
   if (path.startsWith('http')) return path
-  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+  if (!apiBase) return path
+
+  const apiUrl = new URL(apiBase)
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${base}${normalizedPath}`
+
+  // Paths que já incluem /media devem usar apenas o origin (sem /api)
+  if (normalizedPath.startsWith('/media/')) {
+    return `${apiUrl.origin}${normalizedPath}`
+  }
+
+  return `${apiBase}${normalizedPath}`
 }
 
 const activeConversationId = ref<string | null>(null)
