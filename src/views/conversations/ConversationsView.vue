@@ -106,7 +106,8 @@
                     v-if="getMediaSrc(message)" 
                     :src="getMediaSrc(message)" 
                     :alt="message.mediaCaption || 'Imagem recebida'" 
-                    class="media-image" />
+                    class="media-image"
+                    @error="handleMediaError(message)" />
                   <span v-else-if="isMediaExpired(message)" class="media-expired">Imagem expirada</span>
                   <div v-else class="media-loading">
                     <i class="fas fa-spinner fa-spin" v-if="isMediaLoading(message.id)"></i>
@@ -119,11 +120,12 @@
                   </div>
 </template>
 <template v-else-if="message.mediaType === 'AUDIO'">
-  <audio 
+                  <audio 
                     v-if="getMediaSrc(message)" 
                     :src="getMediaSrc(message)" 
     controls 
-    class="media-audio"></audio>
+                    class="media-audio"
+                    @error="handleMediaError(message)"></audio>
                   <span v-else-if="isMediaExpired(message)" class="media-expired">Áudio indisponível</span>
                   <div v-else class="media-loading">
                     <i class="fas fa-spinner fa-spin" v-if="isMediaLoading(message.id)"></i>
@@ -369,6 +371,7 @@ const isMobileSidebarOpen = ref(false)
 const mediaUrls = ref<Record<string, string>>({})
 const mediaLoadingState = ref<Record<string, boolean>>({})
 const mediaErrors = ref<Record<string, string>>({})
+const mediaRetryCount = ref<Record<string, number>>({})
 
 const activeConversationId = ref<string | null>(null)
 const onlineOperators = ref<User[]>([])
@@ -825,6 +828,17 @@ const downloadMedia = async (message: Message) => {
   link.target = '_blank'
   link.rel = 'noopener'
   link.click()
+}
+
+const handleMediaError = (message: Message) => {
+  if (!message.hasMedia) return
+  const count = mediaRetryCount.value[message.id] || 0
+  if (count >= 1 || isMediaExpired(message)) {
+    mediaErrors.value[message.id] = 'Não foi possível carregar a mídia'
+    return
+  }
+  mediaRetryCount.value[message.id] = count + 1
+  loadMedia(message, true)
 }
 
 const preloadMedia = (list: Message[]) => {
