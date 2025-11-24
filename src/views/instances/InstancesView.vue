@@ -353,7 +353,7 @@ const closeModal = () => {
 }
 
 const deleteInstance = async (id: string) => {
-  if (!confirm('Tem certeza que deseja deletar esta instância?')) {
+  if (!confirm('Tem certeza que deseja deletar esta instância?\n\n⚠️ A instância só pode ser removida se não tiver conversas ou campanhas associadas.')) {
     return
   }
 
@@ -362,8 +362,66 @@ const deleteInstance = async (id: string) => {
     await loadInstances()
   } catch (error: any) {
     console.error('Erro ao deletar instância:', error)
-    const errorMessage = error.response?.data?.message || error.message || 'Erro ao deletar instância'
-    alert(`Erro ao deletar instância:\n\n${errorMessage}`)
+    console.error('Response data:', error.response?.data)
+    
+    let errorMessage = 'Erro ao deletar instância'
+    
+    if (error.response?.data) {
+      const data = error.response.data
+      
+      // Handle nested message object (NestJS validation format)
+      if (data.message && typeof data.message === 'object') {
+        const messageObj = data.message
+        const errors: string[] = []
+        
+        // Extract validation errors from message object
+        if (Array.isArray(messageObj)) {
+          errors.push(...messageObj.map((m: any) => typeof m === 'string' ? m : JSON.stringify(m)))
+        } else {
+          // Extract all error messages from object
+          Object.keys(messageObj).forEach(key => {
+            const value = messageObj[key]
+            if (Array.isArray(value)) {
+              value.forEach((v: any) => {
+                if (typeof v === 'string') {
+                  errors.push(v)
+                } else {
+                  errors.push(`${key}: ${JSON.stringify(v)}`)
+                }
+              })
+            } else if (typeof value === 'string') {
+              errors.push(value)
+            } else {
+              errors.push(`${key}: ${JSON.stringify(value)}`)
+            }
+          })
+        }
+        
+        if (errors.length > 0) {
+          errorMessage = errors.join('\n')
+        } else {
+          errorMessage = JSON.stringify(messageObj, null, 2)
+        }
+      } else if (data.message && typeof data.message === 'string') {
+        errorMessage = data.message
+      } else if (data.error) {
+        errorMessage = data.error
+      } else if (typeof data === 'string') {
+        errorMessage = data
+      } else {
+        // Try to extract validation errors
+        const errors = Object.values(data).flat()
+        if (errors.length > 0) {
+          errorMessage = errors.join(', ')
+        } else {
+          errorMessage = JSON.stringify(data, null, 2)
+        }
+      }
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(`Erro ao deletar instância:\n\n${errorMessage}\n\n⚠️ A instância só pode ser removida se não tiver conversas ou campanhas associadas.`)
   }
 }
 
