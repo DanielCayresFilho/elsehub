@@ -6,11 +6,58 @@ import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
 import { api } from '@/services/api'
 
+const MEDIA_PREVIEW_MAP: Record<string, string> = {
+  IMAGE: '[Imagem recebida]',
+  AUDIO: '[Áudio recebido]',
+  DOCUMENT: '[Documento recebido]',
+  VIDEO: '[Vídeo recebido]',
+  STICKER: '[Sticker recebido]'
+}
+
+export function getMessagePreviewLabel(message?: Message | null): string {
+  if (!message) return ''
+
+  if (message.hasMedia) {
+    if (message.mediaCaption) return message.mediaCaption
+    if (message.mediaType && MEDIA_PREVIEW_MAP[message.mediaType]) {
+      return MEDIA_PREVIEW_MAP[message.mediaType]
+    }
+    return '📎 Arquivo recebido'
+  }
+
+  if (message.content && message.content.trim().length > 0) {
+    return message.content
+  }
+
+  if (message.direction === 'OUTBOUND') {
+    return 'Mensagem enviada'
+  }
+
+  return 'Mensagem recebida'
+}
+
 export const useConversationStore = defineStore('conversation', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversation = ref<Conversation | null>(null)
   const messages = ref<Message[]>([])
   const loading = ref(false)
+  
+  function updateConversationMetadata(conversationId: string, message?: Message) {
+    if (!message) return
+    const preview = getMessagePreviewLabel(message)
+    const timestamp = message.timestamp || message.createdAt
+    
+    const index = conversations.value.findIndex(c => c.id === conversationId)
+    if (index !== -1) {
+      conversations.value[index].lastMessageAt = timestamp
+      conversations.value[index].lastMessagePreview = preview
+    }
+    
+    if (activeConversation.value?.id === conversationId) {
+      activeConversation.value.lastMessageAt = timestamp
+      activeConversation.value.lastMessagePreview = preview
+    }
+  }
   
   // Função para atualizar mensagens diretamente (usado pelo polling)
   function setMessages(newMessages: Message[]) {
@@ -21,6 +68,11 @@ export const useConversationStore = defineStore('conversation', () => {
       const dateB = new Date(b.timestamp || b.createdAt).getTime()
       return dateA - dateB
     })
+    
+    const lastMessage = messages.value[messages.value.length - 1]
+    if (lastMessage) {
+      updateConversationMetadata(lastMessage.conversationId, lastMessage)
+    }
   }
 
   async function loadConversations() {
@@ -59,9 +111,9 @@ export const useConversationStore = defineStore('conversation', () => {
       // Tenta carregar mensagens da conversa apenas se não tiver mensagens ainda
       if (messages.value.length === 0) {
         // Primeiro verifica se vem no objeto da conversa
-        if (conversation.messages && conversation.messages.length > 0) {
-          console.log('Carregando mensagens do objeto da conversa')
-          messages.value = conversation.messages
+          if (conversation.messages && conversation.messages.length > 0) {
+            console.log('Carregando mensagens do objeto da conversa')
+            messages.value = conversation.messages
         } else {
           // Se não vier, tenta buscar via endpoint de mensagens
           console.log('Tentando buscar mensagens via endpoint...')
@@ -83,6 +135,11 @@ export const useConversationStore = defineStore('conversation', () => {
         }
       } else {
         console.log('Mantendo mensagens já carregadas:', messages.value.length)
+      }
+      
+      if (messages.value.length > 0) {
+        const lastMessage = messages.value[messages.value.length - 1]
+        updateConversationMetadata(conversationId, lastMessage)
       }
       
       // Ordena mensagens por data (mais antigas primeiro)
@@ -166,10 +223,7 @@ export const useConversationStore = defineStore('conversation', () => {
     }
     
     // Update conversation list
-    const convIndex = conversations.value.findIndex(c => c.id === message.conversationId)
-    if (convIndex !== -1) {
-      conversations.value[convIndex].lastMessageAt = message.timestamp || message.createdAt
-    }
+    updateConversationMetadata(message.conversationId, message)
   }
 
   function addConversation(conversation: Conversation) {
@@ -228,6 +282,8 @@ export const useConversationStore = defineStore('conversation', () => {
         activeConversation.value = conversation
         if (conversation.messages) {
           messages.value = conversation.messages
+          const lastMessage = conversation.messages[conversation.messages.length - 1]
+          updateConversationMetadata(conversation.id, lastMessage)
         }
       }
     })

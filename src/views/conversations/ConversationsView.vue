@@ -1,7 +1,7 @@
 <template>
   <div class="conversations-view">
     <!-- Conversations List -->
-    <div class="conversations-sidebar">
+    <div class="conversations-sidebar" :class="{ 'sidebar-mobile-open': isMobileSidebarOpen }">
       <div class="sidebar-header">
         <h3>Conversas</h3>
         <div class="header-actions">
@@ -45,11 +45,16 @@
               <h4>{{ conversation.contactName || conversation.contact?.name || 'Sem nome' }}</h4>
               <span class="conversation-time">{{ formatDate(conversation.lastMessageAt || conversation.updatedAt) }}</span>
             </div>
-            <p class="conversation-phone">{{ formatPhone(conversation.contactPhone || conversation.contact?.phone) }}</p>
+            <p class="conversation-preview">{{ getConversationPreview(conversation) }}</p>
           </div>
           <span v-if="conversation.unreadCount" class="unread-badge">{{ conversation.unreadCount }}</span>
         </div>
       </div>
+    </div>
+    <div 
+      v-if="isMobileSidebarOpen" 
+      class="mobile-sidebar-overlay" 
+      @click="isMobileSidebarOpen = false">
     </div>
 
     <!-- Chat Area -->
@@ -58,11 +63,17 @@
         <i class="fas fa-comments"></i>
         <h3>Selecione uma conversa</h3>
         <p>Escolha uma conversa da lista ao lado para começar</p>
+        <button class="mobile-open-sidebar" type="button" @click="openSidebarOnMobile">
+          Abrir conversas
+        </button>
       </div>
 
       <template v-else>
         <!-- Chat Header -->
         <div class="chat-header">
+          <button class="icon-btn mobile-sidebar-toggle" @click="openSidebarOnMobile" title="Conversas">
+            <i class="fas fa-bars"></i>
+          </button>
           <div class="contact-info">
             <div class="contact-avatar">
               {{ getInitials(activeConversation?.contactName || activeConversation?.contact?.name || 'Sem nome') }}
@@ -89,7 +100,50 @@
           </div>
           <div v-for="message in messages" :key="message.id" :class="['message', { 'message-from-me': message.fromMe || message.direction === 'OUTBOUND' }]">
             <div class="message-bubble">
-              <p class="message-content">{{ message.content }}</p>
+              <div v-if="message.hasMedia" class="message-media">
+                <template v-if="message.mediaType === 'IMAGE'">
+                  <img 
+                    v-if="mediaUrls[message.id]" 
+                    :src="mediaUrls[message.id]" 
+                    :alt="message.mediaCaption || 'Imagem recebida'" 
+                    class="media-image" />
+                  <button 
+                    v-else 
+                    class="media-action" 
+                    @click="loadMedia(message, true)" 
+                    :disabled="isMediaLoading(message.id)">
+                    {{ isMediaLoading(message.id) ? 'Carregando imagem...' : 'Carregar imagem' }}
+                  </button>
+                </template>
+                <template v-else-if="message.mediaType === 'AUDIO'">
+                  <audio 
+                    v-if="mediaUrls[message.id]" 
+                    :src="mediaUrls[message.id]" 
+                    controls 
+                    class="media-audio"></audio>
+                  <button 
+                    v-else 
+                    class="media-action" 
+                    @click="loadMedia(message, true)" 
+                    :disabled="isMediaLoading(message.id)">
+                    {{ isMediaLoading(message.id) ? 'Carregando áudio...' : 'Carregar áudio' }}
+                  </button>
+                </template>
+                <template v-else>
+                  <button 
+                    class="media-action" 
+                    @click="downloadMedia(message)" 
+                    :disabled="isMediaLoading(message.id)">
+                    {{ isMediaLoading(message.id) ? 'Preparando arquivo...' : `Baixar ${getMediaLabel(message)}` }}
+                  </button>
+                </template>
+                <p v-if="message.mediaCaption" class="media-caption">{{ message.mediaCaption }}</p>
+                <p v-if="mediaErrors[message.id]" class="media-error">
+                  {{ mediaErrors[message.id] }}
+                  <button class="media-action link" @click="loadMedia(message, true)">Tentar novamente</button>
+                </p>
+              </div>
+              <p v-if="shouldShowMessageText(message)" class="message-content">{{ message.content }}</p>
               <span class="message-time">{{ formatMessageTime(message.timestamp || message.createdAt) }}</span>
             </div>
           </div>
@@ -272,7 +326,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useConversationStore } from '@/stores/conversation.store'
+import { useConversationStore, getMessagePreviewLabel } from '@/stores/conversation.store'
 import { userService } from '@/services/user.service'
 import { tabulationService } from '@/services/tabulation.service'
 import { conversationService } from '@/services/conversation.service'
@@ -280,7 +334,8 @@ import { serviceInstanceService } from '@/services/service-instance.service'
 import { contactService } from '@/services/contact.service'
 import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
-import type { User, Tabulation, ServiceInstance, Contact } from '@/types'
+import { api } from '@/services/api'
+import type { User, Tabulation, ServiceInstance, Contact, Message, Conversation } from '@/types'
 
 const conversationStore = useConversationStore()
 
@@ -290,6 +345,11 @@ const newMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const typingTimeout = ref<NodeJS.Timeout | null>(null)
 const isTyping = ref(false)
+const isMobileSidebarOpen = ref(false)
+
+const mediaUrls = ref<Record<string, string>>({})
+const mediaLoadingState = ref<Record<string, boolean>>({})
+const mediaErrors = ref<Record<string, string>>({})
 
 const activeConversationId = ref<string | null>(null)
 const onlineOperators = ref<User[]>([])
@@ -319,18 +379,34 @@ const newContactForm = ref({
 })
 const creatingContact = ref(false)
 
+const MOBILE_BREAKPOINT = 1024
+const isMobileViewport = () => window.innerWidth <= MOBILE_BREAKPOINT
+
 const conversations = computed(() => conversationStore.conversations)
 const activeConversation = computed(() => conversationStore.activeConversation)
 const messages = computed(() => conversationStore.messages)
+
+const openSidebarOnMobile = () => {
+  if (isMobileViewport()) {
+    isMobileSidebarOpen.value = true
+  }
+}
+
+const closeSidebarOnMobile = () => {
+  if (isMobileViewport()) {
+    isMobileSidebarOpen.value = false
+  }
+}
 
 const filteredConversations = computed(() => {
   if (!searchQuery.value) return conversations.value
   
   const query = searchQuery.value.toLowerCase()
-  return conversations.value.filter(conv => 
-    conv.contact?.name?.toLowerCase().includes(query) ||
-    conv.contact?.phone?.includes(query)
-  )
+  return conversations.value.filter(conv => {
+    const name = (conv.contactName || conv.contact?.name || '').toLowerCase()
+    const phone = conv.contactPhone || conv.contact?.phone || ''
+    return name.includes(query) || phone.includes(query)
+  })
 })
 
 const loadConversations = async () => {
@@ -354,6 +430,7 @@ const selectConversation = async (id: string) => {
     
     // Log para debug
     console.log('Mensagens após selecionar:', conversationStore.messages.length)
+    closeSidebarOnMobile()
   } catch (error) {
     console.error('Erro ao selecionar conversa:', error)
     alert('Erro ao carregar conversa. Verifique o console para mais detalhes.')
@@ -636,6 +713,90 @@ const formatPhone = (phone?: string) => {
   return phone.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4')
 }
 
+const getConversationPreview = (conversation: Conversation) => {
+  if (conversation.lastMessagePreview) return conversation.lastMessagePreview
+  if (activeConversation.value?.id === conversation.id && messages.value.length > 0) {
+    return getMessagePreviewLabel(messages.value[messages.value.length - 1])
+  }
+  const phone = conversation.contactPhone || conversation.contact?.phone
+  if (phone) return formatPhone(phone)
+  return 'Sem mensagens ainda'
+}
+
+const shouldShowMessageText = (message: Message) => {
+  if (!message.content) return false
+  const trimmed = message.content.trim()
+  if (message.hasMedia && !message.mediaCaption && /^\[.+\]$/.test(trimmed)) {
+    return false
+  }
+  return true
+}
+
+const getMediaDownloadUrl = (message: Message) => message.mediaDownloadPath || `/messages/${message.id}/media`
+const isMediaLoading = (messageId: string) => !!mediaLoadingState.value[messageId]
+const getMediaLabel = (message: Message) => message.mediaFileName || getMessagePreviewLabel(message)
+
+const ensureMediaLoaded = async (message: Message, force = false) => {
+  if (!message.hasMedia) return
+  const messageId = message.id
+  
+  if (!force) {
+    if (mediaUrls.value[messageId] || mediaLoadingState.value[messageId]) {
+      return
+    }
+  }
+  
+  mediaErrors.value = { ...mediaErrors.value, [messageId]: '' }
+  mediaLoadingState.value = { ...mediaLoadingState.value, [messageId]: true }
+  
+  try {
+    const endpoint = getMediaDownloadUrl(message)
+    const response = await api.get(endpoint, { responseType: 'blob' })
+    if (mediaUrls.value[messageId]) {
+      URL.revokeObjectURL(mediaUrls.value[messageId])
+    }
+    const blobUrl = URL.createObjectURL(response.data)
+    mediaUrls.value = { ...mediaUrls.value, [messageId]: blobUrl }
+  } catch (error: any) {
+    console.error('Erro ao carregar mídia:', error)
+    mediaErrors.value = { 
+      ...mediaErrors.value, 
+      [messageId]: error.response?.data?.message || 'Erro ao carregar mídia' 
+    }
+  } finally {
+    mediaLoadingState.value = { ...mediaLoadingState.value, [messageId]: false }
+  }
+}
+
+const loadMedia = (message: Message, force = false) => {
+  ensureMediaLoaded(message, force)
+}
+
+const downloadMedia = async (message: Message) => {
+  await ensureMediaLoaded(message, true)
+  const url = mediaUrls.value[message.id]
+  if (!url) return
+  const link = document.createElement('a')
+  link.href = url
+  link.download = message.mediaFileName || 'arquivo'
+  link.click()
+}
+
+const preloadMedia = (list: Message[]) => {
+  list.forEach(message => {
+    if (message.hasMedia) {
+      ensureMediaLoaded(message)
+    }
+  })
+}
+
+const cleanupMediaCache = () => {
+  Object.values(mediaUrls.value).forEach(url => URL.revokeObjectURL(url))
+  mediaUrls.value = {}
+  mediaLoadingState.value = {}
+  mediaErrors.value = {}
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   if (messagesContainer.value) {
@@ -643,12 +804,14 @@ const scrollToBottom = async () => {
   }
 }
 
-watch(messages, () => {
+watch(messages, (newMessages) => {
   scrollToBottom()
-})
+  preloadMedia(newMessages)
+}, { deep: true, immediate: true })
 
 // Polling como fallback quando WebSocket não funciona
 let messagePollInterval: ReturnType<typeof setInterval> | null = null
+let resizeListener: (() => void) | null = null
 
 const startMessagePolling = () => {
   // Limpa intervalo anterior se existir
@@ -700,6 +863,9 @@ onMounted(() => {
   loadConversations()
   loadOperatorsAndTabulations()
   conversationStore.setupWebSocketListeners()
+  if (isMobileViewport()) {
+    isMobileSidebarOpen.value = true
+  }
   
   // Log para debug
   console.log('ConversationsView montado')
@@ -715,11 +881,24 @@ onMounted(() => {
   if (activeConversationId.value) {
     startMessagePolling()
   }
+  
+  resizeListener = () => {
+    if (!isMobileViewport()) {
+      isMobileSidebarOpen.value = false
+    }
+  }
+  window.addEventListener('resize', resizeListener)
 })
 
 onUnmounted(() => {
   // Para polling
   stopMessagePolling()
+  cleanupMediaCache()
+  
+  if (resizeListener) {
+    window.removeEventListener('resize', resizeListener)
+    resizeListener = null
+  }
   
   // Para indicador de digitação
   if (typingTimeout.value) {
@@ -748,6 +927,8 @@ onUnmounted(() => {
 
   @include max-width($breakpoint-lg) {
     grid-template-columns: 1fr;
+    height: auto;
+    position: relative;
   }
 }
 
@@ -757,6 +938,22 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: transform $transition-fast;
+
+  &.sidebar-mobile-open {
+    transform: translateX(0);
+  }
+
+  @include max-width($breakpoint-lg) {
+    position: fixed;
+    top: calc(#{$header-height} + $spacing-lg);
+    left: $spacing-md;
+    right: $spacing-md;
+    max-width: 20rem;
+    height: calc(100vh - #{$header-height} - #{$spacing-lg * 2});
+    z-index: 15;
+    transform: translateX(-120%);
+  }
 }
 
 .sidebar-header {
@@ -899,9 +1096,12 @@ onUnmounted(() => {
   }
 }
 
-.conversation-phone {
-  font-size: 0.75rem;
+.conversation-preview {
+  font-size: 0.8rem;
   color: $text-secondary-light;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   .dark & {
     color: $text-secondary-dark;
@@ -949,6 +1149,12 @@ onUnmounted(() => {
 
   p {
     font-size: 0.875rem;
+  }
+
+  .mobile-open-sidebar {
+    @include button-primary;
+    display: none;
+    margin-top: $spacing-md;
   }
 }
 
@@ -1022,12 +1228,28 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-start;
 
+  .message-bubble {
+    color: $text-primary-light;
+  }
+
+  .dark & {
+    .message-bubble {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+  }
+
   &.message-from-me {
     justify-content: flex-end;
 
     .message-bubble {
       background: $primary-light;
       color: white;
+
+      .dark & {
+        background: lighten($primary-light, 10%);
+        color: #fff;
+      }
     }
   }
 }
@@ -1037,9 +1259,11 @@ onUnmounted(() => {
   padding: $spacing-sm $spacing-md;
   border-radius: $radius-lg;
   background: $surface-light;
+  color: $text-primary-light;
 
   .dark & {
-    background: $surface-dark;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
 
   .message-content {
@@ -1051,6 +1275,51 @@ onUnmounted(() => {
   .message-time {
     font-size: 0.75rem;
     opacity: 0.7;
+  }
+}
+
+.message-media {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-xs;
+
+  .media-image {
+    width: 100%;
+    max-height: 18rem;
+    object-fit: cover;
+    border-radius: $radius-md;
+  }
+
+  .media-audio {
+    width: 100%;
+  }
+
+  .media-caption {
+    font-size: 0.8rem;
+    opacity: 0.85;
+  }
+
+  .media-error {
+    font-size: 0.75rem;
+    color: $error;
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+  }
+
+  .media-action {
+    @include button-secondary;
+    width: fit-content;
+    padding: $spacing-xs $spacing-sm;
+    font-size: 0.75rem;
+
+    &.link {
+      background: none;
+      border: none;
+      color: $primary-light;
+      padding: 0;
+    }
   }
 }
 
@@ -1097,6 +1366,33 @@ onUnmounted(() => {
 
   &:hover {
     color: $primary-light;
+  }
+}
+
+.mobile-sidebar-toggle {
+  display: none;
+  margin-right: $spacing-md;
+}
+
+.mobile-sidebar-overlay {
+  display: none;
+}
+
+@include max-width($breakpoint-lg) {
+  .mobile-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .mobile-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 14;
+  }
+
+  .no-conversation .mobile-open-sidebar {
+    display: inline-flex;
   }
 }
 

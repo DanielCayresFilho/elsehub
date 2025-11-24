@@ -111,6 +111,7 @@ export interface Conversation {
   status: ConversationStatus
   startTime?: string // Data de início da conversa
   lastMessageAt?: string | null
+  lastMessagePreview?: string | null
   messageCount?: number
   closedAt?: string
   tabulationId?: string
@@ -135,6 +136,13 @@ export interface Message {
   read?: boolean
   status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
   externalId?: string // ID da mensagem na Evolution/Meta API
+  hasMedia?: boolean
+  mediaType?: 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'VIDEO' | 'STICKER' | string
+  mediaFileName?: string
+  mediaMimeType?: string
+  mediaSize?: number
+  mediaCaption?: string | null
+  mediaDownloadPath?: string
 }
 
 // Campaign Types
