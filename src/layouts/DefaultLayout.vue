@@ -1,9 +1,11 @@
 <template>
   <div class="app-layout">
-    <AppSidebar :is-collapsed="isSidebarCollapsed" />
+    <AppSidebar :is-collapsed="isSidebarCollapsed" :is-mobile-open="isMobileSidebarOpen" />
+
+    <div v-if="isMobileSidebarOpen" class="sidebar-overlay" @click="closeMobileSidebar"></div>
     
     <div :class="['main-container', { 'sidebar-collapsed': isSidebarCollapsed }]">
-      <AppHeader @toggle-sidebar="toggleSidebar" />
+      <AppHeader @toggle-sidebar="handleSidebarToggle" />
       
       <main class="main-content">
         <slot />
@@ -13,15 +15,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 
 const isSidebarCollapsed = ref(false)
+const isMobileSidebarOpen = ref(false)
+const route = useRoute()
+const MOBILE_BREAKPOINT = 1024
 
-const toggleSidebar = () => {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-  localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed.value))
+const isMobile = () => window.innerWidth <= MOBILE_BREAKPOINT
+
+const closeMobileSidebar = () => {
+  if (isMobileSidebarOpen.value) {
+    isMobileSidebarOpen.value = false
+  }
+}
+
+const handleSidebarToggle = () => {
+  if (isMobile()) {
+    isMobileSidebarOpen.value = !isMobileSidebarOpen.value
+  } else {
+    isSidebarCollapsed.value = !isSidebarCollapsed.value
+    localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed.value))
+  }
 }
 
 onMounted(() => {
@@ -29,7 +47,26 @@ onMounted(() => {
   if (savedState) {
     isSidebarCollapsed.value = JSON.parse(savedState)
   }
+
+  const handleResize = () => {
+    if (!isMobile()) {
+      isMobileSidebarOpen.value = false
+    }
+  }
+  window.addEventListener('resize', handleResize)
+  onUnmounted(() => {
+    window.removeEventListener('resize', handleResize)
+  })
 })
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (isMobile()) {
+      isMobileSidebarOpen.value = false
+    }
+  }
+)
 </script>
 
 <style scoped lang="scss">
@@ -75,6 +112,13 @@ onMounted(() => {
   @include mobile {
     padding: $spacing-md;
   }
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 90;
 }
 </style>
 

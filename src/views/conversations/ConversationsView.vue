@@ -750,8 +750,16 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
   mediaLoadingState.value = { ...mediaLoadingState.value, [messageId]: true }
   
   try {
-    const endpoint = getMediaDownloadUrl(message)
-    const response = await api.get(endpoint, { responseType: 'blob' })
+    let endpoint = getMediaDownloadUrl(message)
+    const requestConfig: Record<string, any> = { responseType: 'blob' }
+
+    if (endpoint.startsWith('http')) {
+      requestConfig.baseURL = ''
+    } else if (endpoint.startsWith('/api/')) {
+      endpoint = endpoint.replace(/^\/api/, '')
+    }
+
+    const response = await api.get(endpoint, requestConfig)
     if (mediaUrls.value[messageId]) {
       URL.revokeObjectURL(mediaUrls.value[messageId])
     }

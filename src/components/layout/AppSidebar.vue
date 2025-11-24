@@ -1,5 +1,5 @@
 <template>
-  <aside :class="['sidebar', { 'sidebar-collapsed': isCollapsed }]">
+  <aside :class="['sidebar', { 'sidebar-collapsed': isCollapsed, 'sidebar-open': isMobileOpen }]">
     <!-- Logo Section -->
     <div class="sidebar-header">
       <div class="logo-container">
@@ -135,6 +135,7 @@ import { useConversationStore } from '@/stores/conversation.store'
 
 defineProps<{
   isCollapsed: boolean
+  isMobileOpen: boolean
 }>()
 
 const authStore = useAuthStore()
