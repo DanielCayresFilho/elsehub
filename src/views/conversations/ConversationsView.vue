@@ -102,34 +102,59 @@
             <div class="message-bubble">
               <div v-if="message.hasMedia" class="message-media">
 <template v-if="message.mediaType === 'IMAGE'">
-  <img 
-    v-if="mediaUrls[message.id]" 
-    :src="mediaUrls[message.id]" 
-    :alt="message.mediaCaption || 'Imagem recebida'" 
-    class="media-image" />
-  <div v-else class="media-loading">
-    <i class="fas fa-spinner fa-spin"></i>
-    <span>Carregando imagem...</span>
-  </div>
+                  <img 
+                    v-if="getMediaSrc(message)" 
+                    :src="getMediaSrc(message)" 
+                    :alt="message.mediaCaption || 'Imagem recebida'" 
+                    class="media-image" />
+                  <span v-else-if="isMediaExpired(message)" class="media-expired">Imagem expirada</span>
+                  <div v-else class="media-loading">
+                    <i class="fas fa-spinner fa-spin" v-if="isMediaLoading(message.id)"></i>
+                    <button 
+                      class="media-action" 
+                      @click="loadMedia(message, true)" 
+                      :disabled="isMediaLoading(message.id)">
+                      {{ isMediaLoading(message.id) ? 'Carregando imagem...' : 'Carregar imagem' }}
+                    </button>
+                  </div>
 </template>
 <template v-else-if="message.mediaType === 'AUDIO'">
   <audio 
-    v-if="mediaUrls[message.id]" 
-    :src="mediaUrls[message.id]" 
+                    v-if="getMediaSrc(message)" 
+                    :src="getMediaSrc(message)" 
     controls 
     class="media-audio"></audio>
-  <div v-else class="media-loading">
-    <i class="fas fa-spinner fa-spin"></i>
-    <span>Carregando áudio...</span>
+                  <span v-else-if="isMediaExpired(message)" class="media-expired">Áudio indisponível</span>
+                  <div v-else class="media-loading">
+                    <i class="fas fa-spinner fa-spin" v-if="isMediaLoading(message.id)"></i>
+                    <button 
+                      class="media-action" 
+                      @click="loadMedia(message, true)" 
+                      :disabled="isMediaLoading(message.id)">
+                      {{ isMediaLoading(message.id) ? 'Carregando áudio...' : 'Carregar áudio' }}
+                    </button>
   </div>
 </template>
 <template v-else>
-  <button 
-    class="media-action" 
-    @click="downloadMedia(message)" 
-    :disabled="isMediaLoading(message.id)">
-    {{ isMediaLoading(message.id) ? 'Preparando arquivo...' : `Baixar ${getMediaLabel(message)}` }}
-  </button>
+                  <div class="media-document">
+                    <a 
+                      v-if="getMediaSrc(message)" 
+                      :href="getMediaSrc(message)" 
+                      :download="message.mediaFileName || undefined" 
+                      target="_blank" 
+                      rel="noopener">
+                      <i class="fas fa-paperclip"></i>
+                      {{ message.mediaFileName || 'Baixar arquivo' }}
+                    </a>
+                    <button 
+                      v-else-if="!isMediaExpired(message)" 
+                      class="media-action" 
+                      @click="downloadMedia(message)" 
+                      :disabled="isMediaLoading(message.id)">
+                      {{ isMediaLoading(message.id) ? 'Preparando arquivo...' : `Baixar ${getMediaLabel(message)}` }}
+                    </button>
+                    <span v-else class="media-expired">Arquivo indisponível</span>
+                  </div>
 </template>
                 <p v-if="message.mediaCaption" class="media-caption">{{ message.mediaCaption }}</p>
                 <p v-if="mediaErrors[message.id]" class="media-error">
@@ -319,7 +344,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useConversationStore, getMessagePreviewLabel } from '@/stores/conversation.store'
 import { userService } from '@/services/user.service'
 import { tabulationService } from '@/services/tabulation.service'
@@ -717,6 +742,13 @@ const getConversationPreview = (conversation: Conversation) => {
   return 'Sem mensagens ainda'
 }
 
+const hasMediaSource = (message: Message) => !!(mediaUrls.value[message.id] || message.mediaPublicUrl)
+const getMediaSrc = (message: Message) => mediaUrls.value[message.id] || message.mediaPublicUrl || ''
+const isMediaExpired = (message: Message) => message.hasMedia && !hasMediaSource(message) && !message.mediaDownloadPath
+const getMediaDownloadUrl = (message: Message) => message.mediaDownloadPath || `/messages/${message.id}/media`
+const isMediaLoading = (messageId: string) => !!mediaLoadingState.value[messageId]
+const getMediaLabel = (message: Message) => message.mediaFileName || getMessagePreviewLabel(message)
+
 const shouldShowMessageText = (message: Message) => {
   if (!message.content) return false
   if (message.hasMedia) {
@@ -725,23 +757,28 @@ const shouldShowMessageText = (message: Message) => {
   return true
 }
 
-const getMediaDownloadUrl = (message: Message) => message.mediaDownloadPath || `/messages/${message.id}/media`
-const isMediaLoading = (messageId: string) => !!mediaLoadingState.value[messageId]
-const getMediaLabel = (message: Message) => message.mediaFileName || getMessagePreviewLabel(message)
-
 const ensureMediaLoaded = async (message: Message, force = false) => {
   if (!message.hasMedia) return
   const messageId = message.id
-  
-  if (!force) {
-    if (mediaUrls.value[messageId] || mediaLoadingState.value[messageId]) {
-      return
-    }
+
+  if (!force && (message.mediaPublicUrl || mediaUrls.value[messageId] || mediaLoadingState.value[messageId])) {
+    return
   }
-  
-  mediaErrors.value = { ...mediaErrors.value, [messageId]: '' }
-  mediaLoadingState.value = { ...mediaLoadingState.value, [messageId]: true }
-  
+
+  if (message.mediaPublicUrl && !force) {
+    mediaUrls.value[messageId] = message.mediaPublicUrl
+    mediaErrors.value[messageId] = ''
+    return
+  }
+
+  if (!message.mediaDownloadPath) {
+    mediaErrors.value[messageId] = 'Mídia expirada'
+    return
+  }
+
+  mediaErrors.value[messageId] = ''
+  mediaLoadingState.value[messageId] = true
+
   try {
     let endpoint = getMediaDownloadUrl(message)
     const requestConfig: Record<string, any> = { responseType: 'blob' }
@@ -753,46 +790,63 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
     }
 
     const response = await api.get(endpoint, requestConfig)
-    if (mediaUrls.value[messageId]) {
+    if (mediaUrls.value[messageId]?.startsWith('blob:')) {
       URL.revokeObjectURL(mediaUrls.value[messageId])
     }
     const blobUrl = URL.createObjectURL(response.data)
-    mediaUrls.value = { ...mediaUrls.value, [messageId]: blobUrl }
+    mediaUrls.value[messageId] = blobUrl
   } catch (error: any) {
     console.error('Erro ao carregar mídia:', error)
-    mediaErrors.value = { 
-      ...mediaErrors.value, 
-      [messageId]: error.response?.data?.message || 'Erro ao carregar mídia' 
-    }
+    mediaErrors.value[messageId] = error.response?.data?.message || 'Erro ao carregar mídia'
   } finally {
-    mediaLoadingState.value = { ...mediaLoadingState.value, [messageId]: false }
+    mediaLoadingState.value[messageId] = false
   }
 }
 
 const loadMedia = (message: Message, force = false) => {
+  if (message.mediaPublicUrl && !force) {
+    mediaUrls.value[message.id] = message.mediaPublicUrl
+    mediaErrors.value[message.id] = ''
+    return
+  }
   ensureMediaLoaded(message, force)
 }
 
 const downloadMedia = async (message: Message) => {
-  await ensureMediaLoaded(message, true)
-  const url = mediaUrls.value[message.id]
+  let url = getMediaSrc(message)
+  if (!url) {
+    await ensureMediaLoaded(message, true)
+    url = getMediaSrc(message)
+  }
   if (!url) return
   const link = document.createElement('a')
   link.href = url
   link.download = message.mediaFileName || 'arquivo'
+  link.target = '_blank'
+  link.rel = 'noopener'
   link.click()
 }
 
 const preloadMedia = (list: Message[]) => {
   list.forEach(message => {
-    if (message.hasMedia) {
+    if (!message.hasMedia) return
+    if (message.mediaPublicUrl) {
+      mediaUrls.value[message.id] = message.mediaPublicUrl
+      mediaErrors.value[message.id] = ''
+    } else if (message.mediaDownloadPath) {
       ensureMediaLoaded(message)
+    } else {
+      mediaErrors.value[message.id] = 'Mídia expirada'
     }
   })
 }
 
 const cleanupMediaCache = () => {
-  Object.values(mediaUrls.value).forEach(url => URL.revokeObjectURL(url))
+  Object.values(mediaUrls.value).forEach(url => {
+    if (url.startsWith('blob:')) {
+      URL.revokeObjectURL(url)
+    }
+  })
   mediaUrls.value = {}
   mediaLoadingState.value = {}
   mediaErrors.value = {}
@@ -809,14 +863,6 @@ watch(messages, (newMessages) => {
   scrollToBottom()
   preloadMedia(newMessages)
 }, { deep: true, immediate: true })
-
-watchEffect(() => {
-  messages.value.forEach(message => {
-    if (message.hasMedia) {
-      ensureMediaLoaded(message)
-    }
-  })
-})
 
 // Polling como fallback quando WebSocket não funciona
 let messagePollInterval: ReturnType<typeof setInterval> | null = null
@@ -1309,6 +1355,15 @@ onUnmounted(() => {
     opacity: 0.85;
   }
 
+  .media-expired {
+    font-size: 0.8rem;
+    color: $text-secondary-light;
+
+    .dark & {
+      color: $text-secondary-dark;
+    }
+  }
+
   .media-loading {
     display: flex;
     align-items: center;
@@ -1340,6 +1395,26 @@ onUnmounted(() => {
       border: none;
       color: $primary-light;
       padding: 0;
+    }
+  }
+
+  .media-document {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    flex-wrap: wrap;
+
+    a {
+      @include button-secondary;
+      display: inline-flex;
+      align-items: center;
+      gap: $spacing-xs;
+      padding: $spacing-xs $spacing-sm;
+      font-size: 0.8rem;
+
+      i {
+        font-size: 0.8rem;
+      }
     }
   }
 }
