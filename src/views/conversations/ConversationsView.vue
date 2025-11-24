@@ -101,42 +101,36 @@
           <div v-for="message in messages" :key="message.id" :class="['message', { 'message-from-me': message.fromMe || message.direction === 'OUTBOUND' }]">
             <div class="message-bubble">
               <div v-if="message.hasMedia" class="message-media">
-                <template v-if="message.mediaType === 'IMAGE'">
-                  <img 
-                    v-if="mediaUrls[message.id]" 
-                    :src="mediaUrls[message.id]" 
-                    :alt="message.mediaCaption || 'Imagem recebida'" 
-                    class="media-image" />
-                  <button 
-                    v-else 
-                    class="media-action" 
-                    @click="loadMedia(message, true)" 
-                    :disabled="isMediaLoading(message.id)">
-                    {{ isMediaLoading(message.id) ? 'Carregando imagem...' : 'Carregar imagem' }}
-                  </button>
-                </template>
-                <template v-else-if="message.mediaType === 'AUDIO'">
-                  <audio 
-                    v-if="mediaUrls[message.id]" 
-                    :src="mediaUrls[message.id]" 
-                    controls 
-                    class="media-audio"></audio>
-                  <button 
-                    v-else 
-                    class="media-action" 
-                    @click="loadMedia(message, true)" 
-                    :disabled="isMediaLoading(message.id)">
-                    {{ isMediaLoading(message.id) ? 'Carregando áudio...' : 'Carregar áudio' }}
-                  </button>
-                </template>
-                <template v-else>
-                  <button 
-                    class="media-action" 
-                    @click="downloadMedia(message)" 
-                    :disabled="isMediaLoading(message.id)">
-                    {{ isMediaLoading(message.id) ? 'Preparando arquivo...' : `Baixar ${getMediaLabel(message)}` }}
-                  </button>
-                </template>
+<template v-if="message.mediaType === 'IMAGE'">
+  <img 
+    v-if="mediaUrls[message.id]" 
+    :src="mediaUrls[message.id]" 
+    :alt="message.mediaCaption || 'Imagem recebida'" 
+    class="media-image" />
+  <div v-else class="media-loading">
+    <i class="fas fa-spinner fa-spin"></i>
+    <span>Carregando imagem...</span>
+  </div>
+</template>
+<template v-else-if="message.mediaType === 'AUDIO'">
+  <audio 
+    v-if="mediaUrls[message.id]" 
+    :src="mediaUrls[message.id]" 
+    controls 
+    class="media-audio"></audio>
+  <div v-else class="media-loading">
+    <i class="fas fa-spinner fa-spin"></i>
+    <span>Carregando áudio...</span>
+  </div>
+</template>
+<template v-else>
+  <button 
+    class="media-action" 
+    @click="downloadMedia(message)" 
+    :disabled="isMediaLoading(message.id)">
+    {{ isMediaLoading(message.id) ? 'Preparando arquivo...' : `Baixar ${getMediaLabel(message)}` }}
+  </button>
+</template>
                 <p v-if="message.mediaCaption" class="media-caption">{{ message.mediaCaption }}</p>
                 <p v-if="mediaErrors[message.id]" class="media-error">
                   {{ mediaErrors[message.id] }}
@@ -325,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
 import { useConversationStore, getMessagePreviewLabel } from '@/stores/conversation.store'
 import { userService } from '@/services/user.service'
 import { tabulationService } from '@/services/tabulation.service'
@@ -725,9 +719,8 @@ const getConversationPreview = (conversation: Conversation) => {
 
 const shouldShowMessageText = (message: Message) => {
   if (!message.content) return false
-  const trimmed = message.content.trim()
-  if (message.hasMedia && !message.mediaCaption && /^\[.+\]$/.test(trimmed)) {
-    return false
+  if (message.hasMedia) {
+    return !!message.mediaCaption
   }
   return true
 }
@@ -816,6 +809,14 @@ watch(messages, (newMessages) => {
   scrollToBottom()
   preloadMedia(newMessages)
 }, { deep: true, immediate: true })
+
+watchEffect(() => {
+  messages.value.forEach(message => {
+    if (message.hasMedia) {
+      ensureMediaLoaded(message)
+    }
+  })
+})
 
 // Polling como fallback quando WebSocket não funciona
 let messagePollInterval: ReturnType<typeof setInterval> | null = null
@@ -1306,6 +1307,18 @@ onUnmounted(() => {
   .media-caption {
     font-size: 0.8rem;
     opacity: 0.85;
+  }
+
+  .media-loading {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    font-size: 0.8rem;
+    color: $text-secondary-light;
+
+    .dark & {
+      color: $text-secondary-dark;
+    }
   }
 
   .media-error {
