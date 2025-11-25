@@ -1,129 +1,127 @@
-import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
-import type { ApiError } from '@/types'
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { tokenService } from './token.service'
+import { mapAuthApiResponse } from './auth.mappers'
 
-class ApiService {
-  private api: AxiosInstance
-
-  constructor() {
-    this.api = axios.create({
-      baseURL: import.meta.env.VITE_API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-
-    this.setupInterceptors()
-  }
-
-  private setupInterceptors() {
-    // Request interceptor - Add auth token
-    this.api.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        const token = localStorage.getItem('accessToken')
-        if (token && token !== 'undefined' && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`
-          console.log('API: Adding token to request:', config.url, token.substring(0, 20) + '...')
-        }
-        return config
-      },
-      (error) => {
-        console.error('API: Request interceptor error:', error)
-        return Promise.reject(error)
-      }
-    )
-
-    // Response interceptor - Handle errors
-    let isRefreshing = false
-    let failedQueue: any[] = []
-
-    const processQueue = (error: any, token: string | null = null) => {
-      failedQueue.forEach(prom => {
-        if (error) {
-          prom.reject(error)
-        } else {
-          prom.resolve(token)
-        }
-      })
-      failedQueue = []
-    }
-
-    this.api.interceptors.response.use(
-      (response) => response,
-      async (error: AxiosError<ApiError>) => {
-        const originalRequest: any = error.config
-        
-        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-          if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh')) {
-            return Promise.reject(error)
-          }
-
-          if (isRefreshing) {
-            return new Promise((resolve, reject) => {
-              failedQueue.push({ resolve, reject })
-            }).then(token => {
-              originalRequest.headers.Authorization = `Bearer ${token}`
-              return this.api.request(originalRequest)
-            }).catch(err => {
-              return Promise.reject(err)
-            })
-          }
-
-          originalRequest._retry = true
-          isRefreshing = true
-
-          const refreshToken = localStorage.getItem('refreshToken')
-          
-          if (!refreshToken) {
-            isRefreshing = false
-            this.clearAuthAndRedirect()
-            return Promise.reject(error)
-          }
-
-          try {
-            const response = await axios.post(
-              `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-              { refreshToken },
-              { timeout: 10000 }
-            )
-            
-            const { accessToken } = response.data
-            localStorage.setItem('accessToken', accessToken)
-            
-            this.api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`
-            
-            processQueue(null, accessToken)
-            isRefreshing = false
-            
-            return this.api.request(originalRequest)
-          } catch (refreshError) {
-            processQueue(refreshError, null)
-            isRefreshing = false
-            this.clearAuthAndRedirect()
-            return Promise.reject(refreshError)
-          }
-        }
-        
-        return Promise.reject(error)
-      }
-    )
-  }
-
-  private clearAuthAndRedirect() {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('user')
-    
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login'
-    }
-  }
-
-  public getClient(): AxiosInstance {
-    return this.api
-  }
+type AuthRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
 }
 
-export const apiService = new ApiService()
-export const api = apiService.getClient()
+const BASE_URL = import.meta.env.VITE_API_BASE_URL
+
+const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+const refreshClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}> = []
+
+const persistUser = (user: any) => {
+  if (!user) return
+  localStorage.setItem('user', JSON.stringify(user))
+}
+
+const processQueue = (error: unknown, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else if (token) {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+const refreshAccessToken = async (): Promise<string> => {
+  const refreshToken = tokenService.getRefreshToken()
+  if (!refreshToken) {
+    throw new Error('Refresh token ausente')
+  }
+  const { data } = await refreshClient.post('/auth/refresh', { refreshToken })
+  const response = mapAuthApiResponse(data)
+  tokenService.persistSession(response)
+  persistUser(response.user)
+  return response.accessToken
+}
+
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenService.getAccessToken()
+    if (token) {
+      config.headers = config.headers ?? {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const { response, config } = error
+
+    if (!response || response.status !== 401 || !config) {
+      return Promise.reject(error)
+    }
+
+    const requestConfig = config as AuthRequestConfig
+    if (requestConfig._retry) {
+      return Promise.reject(error)
+    }
+
+    const refreshToken = tokenService.getRefreshToken()
+    if (!refreshToken) {
+      tokenService.clear()
+      return Promise.reject(error)
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({
+          resolve: (token: string) => {
+            if (!requestConfig.headers) requestConfig.headers = {}
+            requestConfig.headers.Authorization = `Bearer ${token}`
+            requestConfig._retry = true
+            resolve(api.request(requestConfig))
+          },
+          reject
+        })
+      })
+    }
+
+    requestConfig._retry = true
+    isRefreshing = true
+
+    try {
+      const newToken = await refreshAccessToken()
+      processQueue(null, newToken)
+      if (!requestConfig.headers) requestConfig.headers = {}
+      requestConfig.headers.Authorization = `Bearer ${newToken}`
+      return api.request(requestConfig)
+    } catch (refreshError) {
+      processQueue(refreshError, null)
+      tokenService.clear()
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
+  }
+)
+
+export { api }
 

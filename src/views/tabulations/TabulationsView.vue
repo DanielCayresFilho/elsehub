@@ -55,7 +55,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { tabulationService } from '@/services/tabulation.service'
 import type { Tabulation } from '@/types'
 
 const tabulations = ref<Tabulation[]>([])
@@ -63,13 +62,15 @@ const showModal = ref(false)
 const editingTabulation = ref<Tabulation | null>(null)
 const form = ref({ name: '' })
 
-const loadTabulations = async () => {
-  try {
-    const response = await tabulationService.getTabulations()
-    tabulations.value = response.data
-  } catch (error) {
-    console.error('Erro ao carregar tabulações:', error)
-  }
+const loadTabulations = () => {
+  tabulations.value = [
+    {
+      id: 'tab-1',
+      name: 'Atendimento concluído',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]
 }
 
 const openCreateModal = () => {
@@ -89,29 +90,27 @@ const closeModal = () => {
   editingTabulation.value = null
 }
 
-const saveTabulation = async () => {
-  try {
-    if (editingTabulation.value) {
-      await tabulationService.updateTabulation(editingTabulation.value.id, form.value)
-    } else {
-      await tabulationService.createTabulation(form.value)
-    }
-    closeModal()
-    await loadTabulations()
-  } catch (error) {
-    alert('Erro ao salvar tabulação')
+const saveTabulation = () => {
+  if (editingTabulation.value) {
+    tabulations.value = tabulations.value.map(tabulation =>
+      tabulation.id === editingTabulation.value?.id
+        ? { ...tabulation, name: form.value.name, updatedAt: new Date().toISOString() }
+        : tabulation
+    )
+  } else {
+    tabulations.value.unshift({
+      id: `tab-${Date.now()}`,
+      name: form.value.name,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
   }
+  closeModal()
 }
 
-const deleteTabulation = async (id: string) => {
+const deleteTabulation = (id: string) => {
   if (!confirm('Tem certeza que deseja excluir esta tabulação?')) return
-  
-  try {
-    await tabulationService.deleteTabulation(id)
-    await loadTabulations()
-  } catch (error) {
-    alert('Erro ao excluir tabulação')
-  }
+  tabulations.value = tabulations.value.filter(tabulation => tabulation.id !== id)
 }
 
 const formatDate = (date: string) => {

@@ -1,5 +1,5 @@
-import { api } from './api'
 import type { Tabulation, PaginatedResponse } from '@/types'
+import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface CreateTabulationRequest {
   name: string
@@ -7,24 +7,32 @@ interface CreateTabulationRequest {
 
 export const tabulationService = {
   async getTabulations(page = 1, limit = 10): Promise<PaginatedResponse<Tabulation>> {
-    const { data } = await api.get<PaginatedResponse<Tabulation>>('/tabulations', {
-      params: { page, limit }
-    })
-    return data
+    logStubCall('tabulationService', 'getTabulations')
+    return createEmptyPaginated<Tabulation>({ page, limit })
   },
 
   async createTabulation(tabulationData: CreateTabulationRequest): Promise<Tabulation> {
-    const { data } = await api.post<Tabulation>('/tabulations', tabulationData)
-    return data
+    logStubCall('tabulationService', 'createTabulation')
+    return createMockTabulation({ name: tabulationData.name })
   },
 
   async updateTabulation(id: string, tabulationData: CreateTabulationRequest): Promise<Tabulation> {
-    const { data } = await api.patch<Tabulation>(`/tabulations/${id}`, tabulationData)
-    return data
+    logStubCall('tabulationService', 'updateTabulation')
+    return createMockTabulation({ id, name: tabulationData.name })
   },
 
   async deleteTabulation(id: string): Promise<void> {
-    await api.delete(`/tabulations/${id}`)
+    logStubCall('tabulationService', `deleteTabulation:${id}`)
+  }
+}
+
+const createMockTabulation = (overrides?: Partial<Tabulation>): Tabulation => {
+  const now = new Date().toISOString()
+  return {
+    id: overrides?.id ?? 'stub-tabulation',
+    name: overrides?.name ?? 'Tabulação Demo',
+    createdAt: now,
+    updatedAt: now
   }
 }
 

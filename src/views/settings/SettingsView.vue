@@ -43,7 +43,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore } from '@/stores/theme.store'
-import { userService } from '@/services/user.service'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -66,20 +65,16 @@ const loadProfile = () => {
 
 const saveProfile = async () => {
   if (!authStore.user) return
-  
+
   saving.value = true
   try {
-    const payload: any = { name: form.value.name }
-    if (form.value.password) {
-      payload.password = form.value.password
+    authStore.user = {
+      ...authStore.user,
+      name: form.value.name,
+      email: form.value.email
     }
-    
-    await userService.updateUser(authStore.user.id, payload)
-    await authStore.refreshProfile()
-    alert('Perfil atualizado com sucesso!')
     form.value.password = ''
-  } catch (error) {
-    alert('Erro ao atualizar perfil')
+    alert('Perfil atualizado localmente. Backend desativado.')
   } finally {
     saving.value = false
   }

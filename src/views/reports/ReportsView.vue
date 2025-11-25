@@ -57,7 +57,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { reportService } from '@/services/report.service'
 import type { Statistics, OperatorPerformance } from '@/types'
 
 const stats = ref<Statistics>({
@@ -71,17 +70,25 @@ const stats = ref<Statistics>({
 const performance = ref<OperatorPerformance[]>([])
 const filters = ref({ startDate: '', endDate: '' })
 
-const loadReports = async () => {
-  try {
-    const [statsData, perfData] = await Promise.all([
-      reportService.getStatistics(filters.value),
-      reportService.getOperatorPerformance(filters.value)
-    ])
-    stats.value = statsData
-    performance.value = perfData
-  } catch (error) {
-    console.error('Erro ao carregar relatórios:', error)
+const loadReports = () => {
+  stats.value = {
+    totalConversations: 42,
+    activeConversations: 5,
+    closedConversations: 37,
+    totalMessages: 320,
+    averageResponseTime: 90,
+    responseRate: 87
   }
+  performance.value = [
+    {
+      operatorId: 'operator-1',
+      operatorName: 'João Silva',
+      totalConversations: 15,
+      totalMessages: 120,
+      averageResponseTime: 80,
+      satisfaction: 95
+    }
+  ]
 }
 
 const formatTime = (seconds: number) => {

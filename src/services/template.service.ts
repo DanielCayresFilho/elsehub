@@ -1,5 +1,5 @@
-import { api } from './api'
 import type { Template, PaginatedResponse } from '@/types'
+import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface CreateTemplateRequest {
   name: string
@@ -9,24 +9,41 @@ interface CreateTemplateRequest {
 
 export const templateService = {
   async getTemplates(page = 1, limit = 10): Promise<PaginatedResponse<Template>> {
-    const { data } = await api.get<PaginatedResponse<Template>>('/templates', {
-      params: { page, limit }
-    })
-    return data
+    logStubCall('templateService', 'getTemplates')
+    return createEmptyPaginated<Template>({ page, limit })
   },
 
   async createTemplate(templateData: CreateTemplateRequest): Promise<Template> {
-    const { data } = await api.post<Template>('/templates', templateData)
-    return data
+    logStubCall('templateService', 'createTemplate')
+    return createMockTemplate({
+      name: templateData.name,
+      body: templateData.body,
+      serviceInstanceId: templateData.serviceInstanceId
+    })
   },
 
   async updateTemplate(id: string, templateData: Partial<CreateTemplateRequest>): Promise<Template> {
-    const { data } = await api.patch<Template>(`/templates/${id}`, templateData)
-    return data
+    logStubCall('templateService', 'updateTemplate')
+    return createMockTemplate({
+      id,
+      ...templateData
+    })
   },
 
   async deleteTemplate(id: string): Promise<void> {
-    await api.delete(`/templates/${id}`)
+    logStubCall('templateService', `deleteTemplate:${id}`)
+  }
+}
+
+const createMockTemplate = (overrides?: Partial<Template>): Template => {
+  const now = new Date().toISOString()
+  return {
+    id: overrides?.id ?? 'stub-template',
+    name: overrides?.name ?? 'Template Demo',
+    body: overrides?.body ?? 'Corpo do template demo.',
+    serviceInstanceId: overrides?.serviceInstanceId ?? 'stub-instance',
+    createdAt: now,
+    updatedAt: now
   }
 }
 

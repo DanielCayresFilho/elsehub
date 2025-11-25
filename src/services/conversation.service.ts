@@ -1,5 +1,6 @@
-import { api } from './api'
 import type { Conversation, PaginatedResponse } from '@/types'
+import { ConversationStatus } from '@/types'
+import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface CreateConversationRequest {
   contactId: string
@@ -16,36 +17,54 @@ interface CloseConversationRequest {
 
 export const conversationService = {
   async getConversations(page = 1, limit = 10): Promise<PaginatedResponse<Conversation>> {
-    const { data } = await api.get<PaginatedResponse<Conversation>>('/conversations', {
-      params: { page, limit }
-    })
-    return data
+    logStubCall('conversationService', 'getConversations')
+    return createEmptyPaginated<Conversation>({ page, limit })
   },
 
   async getConversation(id: string): Promise<Conversation> {
-    const { data } = await api.get<Conversation>(`/conversations/${id}`)
-    return data
+    logStubCall('conversationService', 'getConversation')
+    return createMockConversation({ id })
   },
 
   async createConversation(conversationData: CreateConversationRequest): Promise<Conversation> {
-    const { data } = await api.post<Conversation>('/conversations', conversationData)
-    return data
+    logStubCall('conversationService', 'createConversation')
+    return createMockConversation({
+      id: 'stub-conversation',
+      contactId: conversationData.contactId,
+      serviceInstanceId: conversationData.serviceInstanceId
+    })
   },
 
   async assignOperator(id: string, operatorId: string): Promise<Conversation> {
-    const payload: AssignOperatorRequest = { operatorId }
-    const { data } = await api.patch<Conversation>(`/conversations/${id}/assign`, payload)
-    return data
+    logStubCall('conversationService', 'assignOperator')
+    return createMockConversation({ id, operatorId })
   },
 
   async closeConversation(id: string, tabulationId: string): Promise<void> {
-    const payload: CloseConversationRequest = { tabulationId }
-    await api.post(`/conversations/${id}/close`, payload)
+    logStubCall('conversationService', 'closeConversation')
   },
 
   async getQueue(): Promise<Conversation[]> {
-    const { data } = await api.get<Conversation[]>('/conversations/queue')
-    return data
+    logStubCall('conversationService', 'getQueue')
+    return []
+  }
+}
+
+const createMockConversation = (overrides?: Partial<Conversation>): Conversation => {
+  const now = new Date().toISOString()
+  return {
+    id: 'stub-conversation-id',
+    contactId: 'stub-contact',
+    serviceInstanceId: 'stub-instance',
+    status: ConversationStatus.OPEN,
+    createdAt: now,
+    updatedAt: now,
+    contactName: 'Contato Demo',
+    operatorId: undefined,
+    operatorName: undefined,
+    messages: [],
+    unreadCount: 0,
+    ...overrides
   }
 }
 

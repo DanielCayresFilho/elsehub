@@ -1,57 +1,73 @@
-import { api } from './api'
 import type { Campaign, CreateCampaignRequest, PaginatedResponse } from '@/types'
+import { CampaignStatus } from '@/types'
+import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 export const campaignService = {
   async getCampaigns(page = 1, limit = 10): Promise<PaginatedResponse<Campaign>> {
-    const { data } = await api.get<PaginatedResponse<Campaign>>('/campaigns', {
-      params: { page, limit }
-    })
-    return data
+    logStubCall('campaignService', 'getCampaigns')
+    return createEmptyPaginated<Campaign>({ page, limit })
   },
 
   async getCampaign(id: string): Promise<Campaign> {
-    const { data } = await api.get<Campaign>(`/campaigns/${id}`)
-    return data
+    logStubCall('campaignService', 'getCampaign')
+    return createMockCampaign({ id })
   },
 
   async createCampaign(campaignData: CreateCampaignRequest): Promise<Campaign> {
-    const { data } = await api.post<Campaign>('/campaigns', campaignData)
-    return data
+    logStubCall('campaignService', 'createCampaign')
+    return createMockCampaign({
+      id: 'stub-campaign',
+      name: campaignData.name,
+      serviceInstanceId: campaignData.serviceInstanceId,
+      templateId: campaignData.templateId
+    })
   },
 
   async uploadContacts(id: string, file: File): Promise<{ totalContacts: number }> {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    const { data } = await api.post<{ totalContacts: number }>(
-      `/campaigns/${id}/upload`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      }
-    )
-    return data
+    logStubCall('campaignService', 'uploadContacts')
+    return { totalContacts: 0 }
   },
 
   async startCampaign(id: string): Promise<Campaign> {
-    const { data } = await api.post<Campaign>(`/campaigns/${id}/start`)
-    return data
+    logStubCall('campaignService', 'startCampaign')
+    return createMockCampaign({ id, status: CampaignStatus.PROCESSING })
   },
 
   async pauseCampaign(id: string): Promise<Campaign> {
-    const { data } = await api.patch<Campaign>(`/campaigns/${id}/pause`)
-    return data
+    logStubCall('campaignService', 'pauseCampaign')
+    return createMockCampaign({ id, status: CampaignStatus.PAUSED })
   },
 
   async resumeCampaign(id: string): Promise<Campaign> {
-    const { data } = await api.patch<Campaign>(`/campaigns/${id}/resume`)
-    return data
+    logStubCall('campaignService', 'resumeCampaign')
+    return createMockCampaign({ id, status: CampaignStatus.PROCESSING })
   },
 
   async deleteCampaign(id: string): Promise<void> {
-    await api.delete(`/campaigns/${id}`)
+    logStubCall('campaignService', `deleteCampaign:${id}`)
+  }
+}
+
+const createMockCampaign = (overrides?: Partial<Campaign>): Campaign => {
+  const now = new Date().toISOString()
+  return {
+    id: 'stub-campaign-id',
+    name: 'Campanha Demo',
+    status: CampaignStatus.DRAFT,
+    serviceInstanceId: 'stub-instance',
+    delaySeconds: 0,
+    totalContacts: 0,
+    sentCount: 0,
+    failedCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    serviceInstance: undefined,
+    templateId: undefined,
+    template: undefined,
+    scheduledAt: undefined,
+    startedAt: undefined,
+    completedAt: undefined,
+    ...overrides
   }
 }
 

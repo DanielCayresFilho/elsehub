@@ -125,7 +125,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { serviceInstanceService } from '@/services/service-instance.service'
 import { ServiceProvider } from '@/types'
 import type { ServiceInstance, QRCodeResponse } from '@/types'
 
@@ -147,141 +146,51 @@ const form = ref({
   isActive: true
 })
 
-const loadInstances = async () => {
-  try {
-    instances.value = await serviceInstanceService.getInstances()
-  } catch (error) {
-    console.error('Erro ao carregar instâncias:', error)
-    alert('Erro ao carregar instâncias')
-  }
-}
-
-const createInstance = async () => {
-  try {
-    // Validate form
-    if (!form.value.name.trim()) {
-      alert('Nome é obrigatório')
-      return
-    }
-    if (!form.value.credentials.apiToken.trim()) {
-      alert('API Token é obrigatório')
-      return
-    }
-    if (!form.value.credentials.serverUrl.trim()) {
-      alert('Server URL é obrigatória')
-      return
-    }
-    if (!form.value.credentials.instanceName.trim()) {
-      alert('Nome da Instância é obrigatório')
-      return
-    }
-
-    // Normalize serverUrl (remove trailing slash if present)
-    let serverUrl = form.value.credentials.serverUrl.trim()
-    if (serverUrl.endsWith('/')) {
-      serverUrl = serverUrl.slice(0, -1)
-    }
-
-    // Validate URL format
-    try {
-      new URL(serverUrl)
-    } catch (e) {
-      alert('Server URL inválida. Use o formato: https://seu-servidor.com')
-      return
-    }
-
-    const payload = {
-      name: form.value.name.trim(),
+const loadInstances = () => {
+  instances.value = [
+    {
+      id: 'instance-demo',
+      name: 'Instância Demo',
       provider: ServiceProvider.EVOLUTION_API,
       credentials: {
-        apiToken: form.value.credentials.apiToken.trim(),
-        serverUrl: serverUrl,
-        instanceName: form.value.credentials.instanceName.trim()
-      }
+        apiToken: 'demo-token',
+        serverUrl: 'https://demo.example.com',
+        instanceName: 'demo'
+      },
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
-
-    console.log('Criando instância com payload:', JSON.stringify(payload, null, 2))
-    await serviceInstanceService.createInstance(payload)
-    closeModal()
-    await loadInstances()
-  } catch (error: any) {
-    console.error('Erro ao criar instância:', error)
-    console.error('Response data:', error.response?.data)
-    
-    let errorMessage = 'Erro ao criar instância'
-    
-    if (error.response?.data) {
-      const data = error.response.data
-      
-      // Handle nested message object (NestJS validation format)
-      if (data.message && typeof data.message === 'object') {
-        const messageObj = data.message
-        const errors: string[] = []
-        
-        // Extract validation errors from message object
-        if (Array.isArray(messageObj)) {
-          errors.push(...messageObj.map((m: any) => typeof m === 'string' ? m : JSON.stringify(m)))
-        } else {
-          // Extract all error messages from object
-          Object.keys(messageObj).forEach(key => {
-            const value = messageObj[key]
-            if (Array.isArray(value)) {
-              value.forEach((v: any) => {
-                if (typeof v === 'string') {
-                  errors.push(`${key}: ${v}`)
-                } else {
-                  errors.push(`${key}: ${JSON.stringify(v)}`)
-                }
-              })
-            } else if (typeof value === 'string') {
-              errors.push(`${key}: ${value}`)
-            } else {
-              errors.push(`${key}: ${JSON.stringify(value)}`)
-            }
-          })
-        }
-        
-        if (errors.length > 0) {
-          errorMessage = errors.join('\n')
-        } else {
-          errorMessage = JSON.stringify(messageObj, null, 2)
-        }
-      } else if (data.message && typeof data.message === 'string') {
-        errorMessage = data.message
-      } else if (data.error) {
-        errorMessage = data.error
-      } else if (typeof data === 'string') {
-        errorMessage = data
-      } else {
-        // Try to extract validation errors
-        const errors = Object.values(data).flat()
-        if (errors.length > 0) {
-          errorMessage = errors.join(', ')
-        } else {
-          errorMessage = JSON.stringify(data, null, 2)
-        }
-      }
-    } else if (error.message) {
-      errorMessage = error.message
-    }
-    
-    alert(`Erro ao criar instância:\n\n${errorMessage}`)
-  }
+  ]
 }
 
-const showQRCode = async (id: string) => {
+const createInstance = () => {
+  if (!form.value.name.trim()) {
+    alert('Nome é obrigatório')
+    return
+  }
+
+  instances.value.unshift({
+    id: `instance-${Date.now()}`,
+    name: form.value.name.trim(),
+    provider: form.value.provider,
+    credentials: {
+      apiToken: form.value.credentials.apiToken.trim() || 'demo-token',
+      serverUrl: form.value.credentials.serverUrl.trim() || 'https://demo.example.com',
+      instanceName: form.value.credentials.instanceName.trim() || 'demo'
+    },
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })
+  closeModal()
+}
+
+const showQRCode = (id: string) => {
   showQRModal.value = true
-  loadingQR.value = true
-  qrCode.value = null
-  try {
-    qrCode.value = await serviceInstanceService.getQRCode(id)
-  } catch (error: any) {
-    console.error('Erro ao carregar QR Code:', error)
-    const errorMessage = error.response?.data?.message || error.message || 'Erro ao carregar QR Code'
-    alert(`Erro ao carregar QR Code:\n\n${errorMessage}`)
-    showQRModal.value = false
-  } finally {
-    loadingQR.value = false
+  loadingQR.value = false
+  qrCode.value = {
+    pairingCode: id.slice(-6).padStart(6, '0')
   }
 }
 
@@ -300,45 +209,30 @@ const editInstance = (instance: ServiceInstance) => {
   showModal.value = true
 }
 
-const updateInstance = async () => {
+const updateInstance = () => {
   if (!editingInstance.value) return
-
-  try {
-    if (!form.value.name.trim()) {
-      alert('Nome é obrigatório')
-      return
-    }
-
-    const payload: any = {
-      name: form.value.name.trim()
-    }
-
-    // Se estiver editando, pode atualizar apenas nome e isActive
-    if (editingInstance.value) {
-      payload.isActive = form.value.isActive
-    }
-
-    await serviceInstanceService.updateInstance(editingInstance.value.id, payload)
-    closeModal()
-    await loadInstances()
-  } catch (error: any) {
-    console.error('Erro ao atualizar instância:', error)
-    const errorMessage = error.response?.data?.message || error.message || 'Erro ao atualizar instância'
-    alert(`Erro ao atualizar instância:\n\n${errorMessage}`)
+  if (!form.value.name.trim()) {
+    alert('Nome é obrigatório')
+    return
   }
+
+  instances.value = instances.value.map(instance =>
+    instance.id === editingInstance.value?.id
+      ? {
+          ...instance,
+          name: form.value.name.trim(),
+          isActive: form.value.isActive,
+          updatedAt: new Date().toISOString()
+        }
+      : instance
+  )
+  closeModal()
 }
 
-const toggleActive = async (instance: ServiceInstance) => {
-  try {
-    await serviceInstanceService.updateInstance(instance.id, {
-      isActive: !instance.isActive
-    })
-    await loadInstances()
-  } catch (error: any) {
-    console.error('Erro ao alterar status:', error)
-    const errorMessage = error.response?.data?.message || error.message || 'Erro ao alterar status'
-    alert(`Erro ao alterar status:\n\n${errorMessage}`)
-  }
+const toggleActive = (instance: ServiceInstance) => {
+  instances.value = instances.value.map(item =>
+    item.id === instance.id ? { ...item, isActive: !item.isActive } : item
+  )
 }
 
 const closeModal = () => {
@@ -352,77 +246,11 @@ const closeModal = () => {
   }
 }
 
-const deleteInstance = async (id: string) => {
-  if (!confirm('Tem certeza que deseja deletar esta instância?\n\n⚠️ A instância só pode ser removida se não tiver conversas ou campanhas associadas.')) {
+const deleteInstance = (id: string) => {
+  if (!confirm('Tem certeza que deseja deletar esta instância?')) {
     return
   }
-
-  try {
-    await serviceInstanceService.deleteInstance(id)
-    await loadInstances()
-  } catch (error: any) {
-    console.error('Erro ao deletar instância:', error)
-    console.error('Response data:', error.response?.data)
-    
-    let errorMessage = 'Erro ao deletar instância'
-    
-    if (error.response?.data) {
-      const data = error.response.data
-      
-      // Handle nested message object (NestJS validation format)
-      if (data.message && typeof data.message === 'object') {
-        const messageObj = data.message
-        const errors: string[] = []
-        
-        // Extract validation errors from message object
-        if (Array.isArray(messageObj)) {
-          errors.push(...messageObj.map((m: any) => typeof m === 'string' ? m : JSON.stringify(m)))
-        } else {
-          // Extract all error messages from object
-          Object.keys(messageObj).forEach(key => {
-            const value = messageObj[key]
-            if (Array.isArray(value)) {
-              value.forEach((v: any) => {
-                if (typeof v === 'string') {
-                  errors.push(v)
-                } else {
-                  errors.push(`${key}: ${JSON.stringify(v)}`)
-                }
-              })
-            } else if (typeof value === 'string') {
-              errors.push(value)
-            } else {
-              errors.push(`${key}: ${JSON.stringify(value)}`)
-            }
-          })
-        }
-        
-        if (errors.length > 0) {
-          errorMessage = errors.join('\n')
-        } else {
-          errorMessage = JSON.stringify(messageObj, null, 2)
-        }
-      } else if (data.message && typeof data.message === 'string') {
-        errorMessage = data.message
-      } else if (data.error) {
-        errorMessage = data.error
-      } else if (typeof data === 'string') {
-        errorMessage = data
-      } else {
-        // Try to extract validation errors
-        const errors = Object.values(data).flat()
-        if (errors.length > 0) {
-          errorMessage = errors.join(', ')
-        } else {
-          errorMessage = JSON.stringify(data, null, 2)
-        }
-      }
-    } else if (error.message) {
-      errorMessage = error.message
-    }
-    
-    alert(`Erro ao deletar instância:\n\n${errorMessage}\n\n⚠️ A instância só pode ser removida se não tiver conversas ou campanhas associadas.`)
-  }
+  instances.value = instances.value.filter(instance => instance.id !== id)
 }
 
 const formatDate = (dateString: string) => {

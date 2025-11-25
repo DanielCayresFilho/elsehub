@@ -237,7 +237,6 @@ Maria Santos,5511988888888,,Cliente Premium</pre>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { contactService } from '@/services/contact.service'
 import type { Contact, CreateContactRequest } from '@/types'
 
 const contacts = ref<Contact[]>([])
@@ -281,17 +280,19 @@ const filteredContacts = computed(() => {
   )
 })
 
-const loadContacts = async () => {
+const loadContacts = () => {
   loading.value = true
-  try {
-    const response = await contactService.getContacts(currentPage.value, 50)
-    contacts.value = response.data
-    totalPages.value = response.meta.totalPages
-  } catch (error) {
-    console.error('Erro ao carregar contatos:', error)
-  } finally {
-    loading.value = false
-  }
+  contacts.value = [
+    {
+      id: 'contact-1',
+      name: 'Carlos Demo',
+      phone: '5511999999999',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]
+  totalPages.value = 1
+  loading.value = false
 }
 
 const openCreateModal = () => {
@@ -326,25 +327,31 @@ const closeModal = () => {
   formError.value = ''
 }
 
-const saveContact = async () => {
+const saveContact = () => {
   saving.value = true
   formError.value = ''
 
-  try {
-    if (editingContact.value) {
-      await contactService.updateContact(editingContact.value.id, form.value)
-    } else {
-      await contactService.createContact(form.value)
-    }
-    
-    closeModal()
-    await loadContacts()
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.message
-    formError.value = Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg || 'Erro ao salvar contato'
-  } finally {
-    saving.value = false
+  if (editingContact.value) {
+    contacts.value = contacts.value.map(contact =>
+      contact.id === editingContact.value?.id
+        ? {
+            ...contact,
+            ...form.value,
+            updatedAt: new Date().toISOString()
+          }
+        : contact
+    )
+  } else {
+    contacts.value.unshift({
+      id: `contact-${Date.now()}`,
+      ...form.value,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
   }
+
+  closeModal()
+  saving.value = false
 }
 
 const confirmDelete = (contact: Contact) => {
@@ -352,20 +359,14 @@ const confirmDelete = (contact: Contact) => {
   showDeleteModal.value = true
 }
 
-const deleteContact = async () => {
+const deleteContact = () => {
   if (!contactToDelete.value) return
-  
+
   deleting.value = true
-  try {
-    await contactService.deleteContact(contactToDelete.value.id)
-    showDeleteModal.value = false
-    contactToDelete.value = null
-    await loadContacts()
-  } catch (error: any) {
-    alert(error.response?.data?.message || 'Erro ao excluir contato')
-  } finally {
-    deleting.value = false
-  }
+  contacts.value = contacts.value.filter(contact => contact.id !== contactToDelete.value?.id)
+  showDeleteModal.value = false
+  contactToDelete.value = null
+  deleting.value = false
 }
 
 const handleFileSelect = (event: Event) => {
@@ -375,31 +376,18 @@ const handleFileSelect = (event: Event) => {
   importSuccess.value = ''
 }
 
-const importCSV = async () => {
+const importCSV = () => {
   if (!selectedFile.value) return
-  
+
   importing.value = true
   importError.value = ''
-  importSuccess.value = ''
+  importSuccess.value = `Arquivo ${selectedFile.value.name} processado localmente.`
 
-  try {
-    const result = await contactService.importCSV(selectedFile.value)
-    importSuccess.value = `${result.imported} contatos importados com sucesso!`
-    if (result.failed > 0) {
-      importSuccess.value += ` (${result.failed} falharam)`
-    }
-    
-    selectedFile.value = null
-    if (fileInput.value) {
-      fileInput.value.value = ''
-    }
-    
-    await loadContacts()
-  } catch (error: any) {
-    importError.value = error.response?.data?.message || 'Erro ao importar CSV'
-  } finally {
-    importing.value = false
+  selectedFile.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
   }
+  importing.value = false
 }
 
 const changePage = (page: number) => {

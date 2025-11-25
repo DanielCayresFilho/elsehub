@@ -1,10 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Conversation, Message } from '@/types'
-import { conversationService } from '@/services/conversation.service'
-import { messageService } from '@/services/message.service'
+import { ConversationStatus } from '@/types'
 import { wsService } from '@/services/websocket.service'
-import { api } from '@/services/api'
 
 const MEDIA_PREVIEW_MAP: Record<string, string> = {
   IMAGE: '[Imagem recebida]',
@@ -78,7 +76,6 @@ export const useConversationStore = defineStore('conversation', () => {
   const activeConversation = ref<Conversation | null>(null)
   const messages = ref<Message[]>([])
   const loading = ref(false)
-  const pendingConversationFetches = new Map<string, Promise<Conversation | null>>()
   
   function sortConversations() {
     conversations.value.sort((a, b) => {
@@ -97,33 +94,14 @@ export const useConversationStore = defineStore('conversation', () => {
       activeConversation.value.unreadCount = 0
     }
   }
-  
-  async function ensureConversationLoaded(conversationId: string) {
+
+  function ensureConversationPresence(conversationId: string): Conversation {
     const existing = conversations.value.find(c => c.id === conversationId)
     if (existing) return existing
-    
-    if (pendingConversationFetches.has(conversationId)) {
-      return pendingConversationFetches.get(conversationId)!
-    }
-    
-    const fetchPromise = conversationService.getConversation(conversationId)
-      .then(conv => {
-        if (conv) {
-          addConversation(conv)
-          return conversations.value.find(c => c.id === conversationId) ?? conv
-        }
-        return null
-      })
-      .catch(error => {
-        console.error('Erro ao buscar conversa em tempo real:', error)
-        return null
-      })
-      .finally(() => {
-        pendingConversationFetches.delete(conversationId)
-      })
-    
-    pendingConversationFetches.set(conversationId, fetchPromise)
-    return fetchPromise
+
+    const placeholder = createDemoConversation(conversationId)
+    addConversation(placeholder)
+    return placeholder
   }
   
   function updateConversationMetadata(conversationId: string, message?: Message) {
@@ -182,8 +160,8 @@ export const useConversationStore = defineStore('conversation', () => {
   async function loadConversations() {
     loading.value = true
     try {
-      const response = await conversationService.getConversations(1, 50)
-      conversations.value = response.data.map(enrichConversation)
+      console.warn('Conversas: backend desativado, carregando lista local.')
+      conversations.value = []
       sortConversations()
     } catch (error) {
       console.error('Erro ao carregar conversas:', error)
@@ -193,103 +171,41 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   async function selectConversation(conversationId: string) {
-    try {
-      console.log('Selecionando conversa:', conversationId)
-      
-      // Verifica se é a mesma conversa ANTES de atualizar activeConversation
-      const isSameConversation = activeConversation.value?.id === conversationId
-      const existingMessages = isSameConversation ? [...messages.value] : []
-      
-      const conversation = enrichConversation(await conversationService.getConversation(conversationId))
-      activeConversation.value = conversation
-      
-      const existingIndex = conversations.value.findIndex(c => c.id === conversationId)
-      if (existingIndex !== -1) {
-        conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...conversation }
-      } else {
-        addConversation(conversation)
-      }
-      clearUnread(conversationId)
-      
-      console.log('Conversa carregada:', conversation)
-      console.log('Mensagens no objeto:', conversation.messages?.length || 0)
-      console.log('É a mesma conversa?', isSameConversation)
-      console.log('Mensagens existentes:', existingMessages.length)
-      
-      // Se mudou de conversa, limpa mensagens
-      if (!isSameConversation) {
-        messages.value = []
-      }
-      
-      // Tenta carregar mensagens da conversa apenas se não tiver mensagens ainda
-      if (messages.value.length === 0) {
-        // Primeiro verifica se vem no objeto da conversa
-          if (conversation.messages && conversation.messages.length > 0) {
-            console.log('Carregando mensagens do objeto da conversa')
-            messages.value = conversation.messages
-        } else {
-          // Se não vier, tenta buscar via endpoint de mensagens
-          console.log('Tentando buscar mensagens via endpoint...')
-          try {
-            // ✅ Conforme documentação: retorna array direto
-            const messagesArray = await messageService.getMessages(conversationId, 1, 100)
-            console.log('Mensagens recebidas do endpoint:', messagesArray.length)
-            messages.value = messagesArray
-          } catch (msgError: any) {
-            // Se o endpoint não existir (404), preserva mensagens existentes se for a mesma conversa
-            console.warn('Endpoint de mensagens não disponível. Usando apenas WebSocket para receber mensagens em tempo real.')
-            if (isSameConversation && existingMessages.length > 0) {
-              console.log('Preservando mensagens existentes da mesma conversa:', existingMessages.length)
-              messages.value = existingMessages
-            } else {
-              messages.value = []
-            }
-          }
-        }
-      } else {
-        console.log('Mantendo mensagens já carregadas:', messages.value.length)
-      }
-      
-      if (messages.value.length > 0) {
-        const lastMessage = messages.value[messages.value.length - 1]
-        updateConversationMetadata(conversationId, lastMessage)
-      }
-      
-      // Ordena mensagens por data (mais antigas primeiro)
-      if (messages.value.length > 0) {
-        messages.value.sort((a, b) => {
-          const dateA = new Date(a.timestamp || a.createdAt).getTime()
-          const dateB = new Date(b.timestamp || b.createdAt).getTime()
-          return dateA - dateB
-        })
-      }
-      
-      // Join WebSocket room para receber mensagens em tempo real
-      // Aguarda um pouco para garantir que WebSocket está conectado
-      if (wsService.isConnected()) {
-        wsService.joinRoom(conversationId)
-      } else {
-        console.warn('WebSocket não conectado, tentando conectar antes de entrar na sala...')
-        wsService.connect()
-        // Aguarda conexão e então entra na sala
-        setTimeout(() => {
-          if (wsService.isConnected()) {
-            wsService.joinRoom(conversationId)
-          } else {
-            console.error('Não foi possível conectar ao WebSocket')
-          }
-        }, 1000)
-      }
-      
-      console.log('Conversa selecionada:', conversation)
-      console.log('Total de mensagens carregadas:', messages.value.length)
-      if (messages.value.length > 0) {
-        console.log('Primeiras mensagens:', messages.value.slice(0, 3))
-      }
-    } catch (error) {
-      console.error('Erro ao selecionar conversa:', error)
-      throw error
+    console.log('Selecionando conversa (stub):', conversationId)
+    const isSameConversation = activeConversation.value?.id === conversationId
+
+    const baseConversation = ensureConversationPresence(conversationId)
+    const enriched = enrichConversation(baseConversation)
+    activeConversation.value = enriched
+
+    const existingIndex = conversations.value.findIndex(c => c.id === conversationId)
+    if (existingIndex !== -1) {
+      conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...enriched }
+    } else {
+      addConversation(enriched)
     }
+    clearUnread(conversationId)
+
+    messages.value = isSameConversation ? [...messages.value] : []
+    if (messages.value.length === 0) {
+      messages.value = enriched.messages?.length ? [...enriched.messages] : [createDemoMessage(conversationId)]
+    }
+
+    messages.value.sort((a, b) => {
+      const dateA = new Date(a.timestamp || a.createdAt).getTime()
+      const dateB = new Date(b.timestamp || b.createdAt).getTime()
+      return dateA - dateB
+    })
+
+    const lastMessage = messages.value[messages.value.length - 1]
+    if (lastMessage) {
+      updateConversationMetadata(conversationId, lastMessage)
+    }
+
+    if (!wsService.isConnected()) {
+      wsService.connect()
+    }
+    wsService.joinRoom(conversationId)
   }
 
   function addMessage(message: Message) {
@@ -350,17 +266,12 @@ export const useConversationStore = defineStore('conversation', () => {
     sortConversations()
   }
 
-  async function closeConversation(conversationId: string, tabulationId: string) {
-    try {
-      await conversationService.closeConversation(conversationId, tabulationId)
-      conversations.value = conversations.value.filter(c => c.id !== conversationId)
-      if (activeConversation.value?.id === conversationId) {
-        activeConversation.value = null
-        messages.value = []
-      }
-    } catch (error) {
-      console.error('Erro ao fechar conversa:', error)
-      throw error
+  async function closeConversation(conversationId: string, _tabulationId: string) {
+    console.warn('Fechando conversa (stub):', conversationId)
+    conversations.value = conversations.value.filter(c => c.id !== conversationId)
+    if (activeConversation.value?.id === conversationId) {
+      activeConversation.value = null
+      messages.value = []
     }
   }
 
@@ -368,7 +279,7 @@ export const useConversationStore = defineStore('conversation', () => {
     console.log('Configurando listeners do WebSocket...')
     
     // Escuta evento message:new conforme documentação
-    wsService.on('message:new', async (message: Message) => {
+    wsService.on('message:new', (message: Message) => {
       console.log('🔔 Nova mensagem recebida via WebSocket:', message)
       console.log('🔔 Detalhes:', {
         id: message.id,
@@ -381,7 +292,7 @@ export const useConversationStore = defineStore('conversation', () => {
       console.log('Conversa ativa:', activeConversation.value?.id)
       console.log('Conversa da mensagem:', message.conversationId)
       console.log('É da conversa ativa?', activeConversation.value?.id === message.conversationId)
-      await ensureConversationLoaded(message.conversationId)
+      ensureConversationPresence(message.conversationId)
       addMessage(message)
     })
 
@@ -432,6 +343,33 @@ export const useConversationStore = defineStore('conversation', () => {
     wsService.on('conversationAssigned', (conversation: Conversation) => {
       addConversation(conversation)
     })
+  }
+
+  function createDemoConversation(id: string): Conversation {
+    const now = new Date().toISOString()
+    return {
+      id,
+      contactId: 'stub-contact',
+      contactName: 'Contato Demo',
+      serviceInstanceId: 'stub-instance',
+      serviceInstanceName: 'Instância Demo',
+      status: ConversationStatus.OPEN,
+      createdAt: now,
+      updatedAt: now,
+      unreadCount: 0,
+      messages: [createDemoMessage(id)]
+    }
+  }
+
+  function createDemoMessage(conversationId: string): Message {
+    return {
+      id: `stub-message-${conversationId}`,
+      conversationId,
+      content: 'Conversa demo sem backend.',
+      createdAt: new Date().toISOString(),
+      direction: 'OUTBOUND',
+      fromMe: true
+    }
   }
 
   return {

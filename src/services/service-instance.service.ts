@@ -1,5 +1,6 @@
-import { api } from './api'
 import type { ServiceInstance, QRCodeResponse } from '@/types'
+import { ServiceProvider } from '@/types'
+import { logStubCall } from './service-stubs'
 
 interface CreateServiceInstanceRequest {
   name: string
@@ -13,32 +14,57 @@ interface CreateServiceInstanceRequest {
 
 export const serviceInstanceService = {
   async getInstances(): Promise<ServiceInstance[]> {
-    const { data } = await api.get<ServiceInstance[]>('/service-instances')
-    return data
+    logStubCall('serviceInstanceService', 'getInstances')
+    return [createMockInstance()]
   },
 
   async getInstanceById(id: string): Promise<ServiceInstance> {
-    const { data } = await api.get<ServiceInstance>(`/service-instances/${id}`)
-    return data
+    logStubCall('serviceInstanceService', 'getInstanceById')
+    return createMockInstance({ id })
   },
 
   async createInstance(instanceData: CreateServiceInstanceRequest): Promise<ServiceInstance> {
-    const { data } = await api.post<ServiceInstance>('/service-instances', instanceData)
-    return data
+    logStubCall('serviceInstanceService', 'createInstance')
+    return createMockInstance({
+      name: instanceData.name,
+      provider: instanceData.provider as ServiceProvider
+    })
   },
 
   async getQRCode(id: string): Promise<QRCodeResponse> {
-    const { data } = await api.get<QRCodeResponse>(`/service-instances/${id}/qrcode`)
-    return data
+    logStubCall('serviceInstanceService', 'getQRCode')
+    return {
+      base64: undefined,
+      pairingCode: '000000',
+      message: 'Instância demo conectada.'
+    }
   },
 
   async updateInstance(id: string, instanceData: Partial<CreateServiceInstanceRequest>): Promise<ServiceInstance> {
-    const { data } = await api.patch<ServiceInstance>(`/service-instances/${id}`, instanceData)
-    return data
+    logStubCall('serviceInstanceService', 'updateInstance')
+    return createMockInstance({ id, name: instanceData.name })
   },
 
   async deleteInstance(id: string): Promise<void> {
-    await api.delete(`/service-instances/${id}`)
+    logStubCall('serviceInstanceService', `deleteInstance:${id}`)
+  }
+}
+
+const createMockInstance = (overrides?: Partial<ServiceInstance>): ServiceInstance => {
+  const now = new Date().toISOString()
+  return {
+    id: 'stub-instance-id',
+    name: 'Instância Demo',
+    provider: ServiceProvider.EVOLUTION_API,
+    credentials: {
+      apiToken: 'stub-token',
+      serverUrl: 'https://stub.example.com',
+      instanceName: 'stub-instance'
+    },
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides
   }
 }
 

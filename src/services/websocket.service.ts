@@ -1,261 +1,40 @@
-import { io, Socket } from 'socket.io-client'
 import type { Message, Conversation } from '@/types'
-import { authService } from './auth.service'
+import { logStubCall } from './service-stubs'
 
 class WebSocketService {
-  private socket: Socket | null = null
   private listeners: Map<string, Set<Function>> = new Map()
-
-  // ✅ Verifica se o token JWT está expirado (conforme documentação)
-  private isTokenExpired(token: string, marginMinutes = 5): boolean {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      const exp = payload.exp * 1000
-      const margin = marginMinutes * 60 * 1000
-      return Date.now() >= (exp - margin)
-    } catch {
-      return true
-    }
-  }
-
-  // ✅ Renova token se necessário antes de conectar
-  private async ensureValidToken(): Promise<string | null> {
-    const token = localStorage.getItem('accessToken')
-    const refreshToken = localStorage.getItem('refreshToken')
-    
-    if (!token) {
-      console.error('No access token found for WebSocket connection')
-      return null
-    }
-    
-    // Verifica se token está expirado
-    if (this.isTokenExpired(token)) {
-      console.warn('⚠️ Token JWT expirado, tentando renovar...')
-      
-      if (!refreshToken) {
-        console.error('No refresh token found')
-        return null
-      }
-      
-      try {
-        const response = await authService.refreshToken(refreshToken)
-        console.log('✅ Token renovado com sucesso')
-        return response.accessToken
-      } catch (error) {
-        console.error('❌ Erro ao renovar token:', error)
-        return null
-      }
-    }
-    
-    return token
-  }
+  private connected = false
 
   async connect() {
-    // Se já está conectado, não reconecta
-    if (this.socket?.connected) {
-      console.log('WebSocket já está conectado')
-      return
-    }
-    
-    // Se já existe socket mas não está conectado, desconecta primeiro
-    if (this.socket && !this.socket.connected) {
-      console.log('Desconectando socket antigo antes de reconectar...')
-      this.socket.removeAllListeners()
-      this.socket.disconnect()
-      this.socket = null
-    }
-
-    // ✅ Verifica e renova token antes de conectar (conforme documentação)
-    const token = await this.ensureValidToken()
-    if (!token) {
-      console.error('No valid token available for WebSocket connection')
-      return
-    }
-
-    // Conecta ao WebSocket conforme documentação
-    // URL base (sem /chat)
-    let wsUrl = import.meta.env.VITE_WS_URL || ''
-    
-    // Remove /chat se existir, pois vamos usar como namespace
-    wsUrl = wsUrl.replace(/\/chat\/?$/, '')
-    
-    // Se não tiver protocolo, adiciona wss://
-    if (wsUrl && !wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
-      wsUrl = 'wss://' + wsUrl.replace(/^https?:\/\//, '')
-    }
-    
-    // Namespace conforme documentação
-    const WS_NAMESPACE = '/chat'
-    const fullUrl = `${wsUrl}${WS_NAMESPACE}`
-    
-    console.log('🔌 Conectando ao WebSocket:', fullUrl)
-    console.log('🔑 Token presente:', !!token, token ? token.substring(0, 20) + '...' : 'N/A')
-    
-    // ✅ CORRETO: Conecta usando URL + namespace conforme documentação
-    // Socket.IO adiciona /socket.io automaticamente
-    this.socket = io(fullUrl, {
-      auth: { token },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionAttempts: Infinity,
-      reconnectionDelayMax: 10000,
-      timeout: 20000
-    })
-
-    // Passa o token para setupEventListeners para evitar erro de referência
-    this.setupEventListeners(token)
-  }
-
-  private setupEventListeners(currentToken: string) {
-    if (!this.socket) return
-
-    this.socket.on('connect', () => {
-      console.log('✅ WebSocket conectado com sucesso!')
-      console.log('Socket ID:', this.socket?.id)
-    })
-
-    this.socket.on('disconnect', (reason: string) => {
-      console.log('❌ WebSocket desconectado. Motivo:', reason)
-      
-      // Se foi desconexão do servidor (não do cliente), pode ser problema de autenticação
-      if (reason === 'io server disconnect') {
-        console.error('⚠️ Servidor desconectou o cliente. Possíveis causas:')
-        console.error('  - Token inválido ou expirado')
-        console.error('  - URL incorreta')
-        console.error('  - Servidor rejeitou a conexão')
-        
-        // Tenta reconectar com novo token após um delay
-        setTimeout(() => {
-          const newToken = localStorage.getItem('accessToken')
-          if (newToken && newToken !== currentToken) {
-            console.log('🔄 Token atualizado, tentando reconectar...')
-            this.connect()
-          }
-        }, 3000)
-      }
-      
-      // Não tenta reconectar manualmente aqui, deixa o Socket.IO fazer isso automaticamente
-      // A reconexão automática já está configurada no io() com reconnectionAttempts: Infinity
-    })
-    
-    this.socket.on('connect_error', (error: any) => {
-      console.error('❌ Erro ao conectar WebSocket:', error.message)
-      console.error('Detalhes:', error)
-      
-      // Se for erro de autenticação
-      if (error.message?.includes('auth') || error.message?.includes('401')) {
-        console.error('⚠️ Erro de autenticação. Verifique o token JWT.')
-      }
-    })
-    
-    // ✅ Tratar erro TOKEN_EXPIRED conforme documentação
-    this.socket.on('error', (error: any) => {
-      console.error('❌ WebSocket error:', error)
-      
-      if (error.type === 'TOKEN_EXPIRED' || error.message?.includes('TOKEN_EXPIRED')) {
-        console.warn('⚠️ Token expirado, tentando renovar e reconectar...')
-        this.handleTokenExpired()
-      }
-    })
-    
-    this.socket.on('reconnect', (attemptNumber: number) => {
-      console.log('🔄 WebSocket reconectado após', attemptNumber, 'tentativas')
-    })
-    
-    this.socket.on('reconnect_attempt', (attemptNumber: number) => {
-      console.log('🔄 Tentando reconectar WebSocket... Tentativa', attemptNumber)
-    })
-
-    // Eventos do servidor conforme documentação
-    this.socket.on('message:new', (message: Message) => {
-      console.log('📨 WebSocket recebeu evento message:new:', message)
-      console.log('📨 Detalhes da mensagem:', {
-        id: message.id,
-        conversationId: message.conversationId,
-        direction: message.direction,
-        content: message.content?.substring(0, 50),
-        senderName: message.senderName,
-        fromMe: (message as any).fromMe
-      })
-      this.emit('message:new', message)
-    })
-
-    this.socket.on('conversation:updated', (conversation: Conversation) => {
-      this.emit('conversation:updated', conversation)
-    })
-
-    this.socket.on('conversation:closed', (data: any) => {
-      // Payload pode ser { conversationId } ou Conversation completo
-      this.emit('conversation:closed', data)
-    })
-
-    // Mantém compatibilidade com eventos antigos
-    this.socket.on('newMessage', (message: Message) => {
-      this.emit('message:new', message)
-    })
-
-    this.socket.on('conversationAssigned', (conversation: Conversation) => {
-      this.emit('conversation:updated', conversation)
-    })
-
-    // Escutar indicador de digitação (opcional)
-    this.socket.on('typing:user', (data: { userId: string; email: string; isTyping: boolean; conversationId: string }) => {
-      this.emit('typing:user', data)
-    })
-
-    // Escutar status de usuários (opcional)
-    this.socket.on('user:online', (data: { userId: string; email: string }) => {
-      this.emit('user:online', data)
-    })
-
-    this.socket.on('user:offline', (data: { userId: string; email: string }) => {
-      this.emit('user:offline', data)
-    })
+    logStubCall('wsService', 'connect')
+    this.connected = true
   }
 
   joinRoom(conversationId: string) {
-    // Usa o evento correto conforme documentação
-    if (this.socket?.connected) {
-      console.log('🚪 Entrando na sala da conversa:', conversationId)
-      this.socket.emit('conversation:join', { conversationId }, (response: any) => {
-        if (response) {
-          console.log('✅ Resposta do conversation:join:', response)
-        }
-      })
-    } else {
-      console.warn('⚠️ WebSocket não conectado, não é possível entrar na sala. Tentando conectar...')
-      this.connect()
-      // Aguarda conexão e tenta novamente
-      const checkAndJoin = setInterval(() => {
-        if (this.socket?.connected) {
-          console.log('🚪 WebSocket conectado, entrando na sala agora:', conversationId)
-          this.socket.emit('conversation:join', { conversationId })
-          clearInterval(checkAndJoin)
-        }
-      }, 500)
-      
-      // Para de tentar após 5 segundos
-      setTimeout(() => clearInterval(checkAndJoin), 5000)
-    }
+    logStubCall('wsService', `joinRoom:${conversationId}`)
   }
 
   leaveRoom(conversationId: string) {
-    // Usa o evento correto conforme documentação
-    this.socket?.emit('conversation:leave', { conversationId })
+    logStubCall('wsService', `leaveRoom:${conversationId}`)
   }
 
   sendMessage(conversationId: string, content: string) {
-    // Usa o evento correto conforme documentação (opcional, pois estamos usando HTTP API)
-    this.socket?.emit('message:send', { conversationId, content })
+    logStubCall('wsService', 'sendMessage')
+    const message: Message = {
+      id: `stub-ws-message-${Date.now()}`,
+      conversationId,
+      content,
+      createdAt: new Date().toISOString()
+    }
+    this.emit('message:new', message)
   }
 
   sendTypingStart(conversationId: string) {
-    this.socket?.emit('typing:start', { conversationId })
+    logStubCall('wsService', `typingStart:${conversationId}`)
   }
 
   sendTypingStop(conversationId: string) {
-    this.socket?.emit('typing:stop', { conversationId })
+    logStubCall('wsService', `typingStop:${conversationId}`)
   }
 
   on(event: string, callback: Function) {
@@ -269,18 +48,18 @@ class WebSocketService {
     this.listeners.get(event)?.delete(callback)
   }
 
-  private emit(event: string, data: any) {
+  private emit(event: string, data: Message | Conversation | any) {
     this.listeners.get(event)?.forEach(callback => callback(data))
   }
 
   disconnect() {
-    this.socket?.disconnect()
-    this.socket = null
+    logStubCall('wsService', 'disconnect')
+    this.connected = false
     this.listeners.clear()
   }
 
   isConnected(): boolean {
-    return this.socket?.connected ?? false
+    return this.connected
   }
 }
 

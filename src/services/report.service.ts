@@ -1,5 +1,5 @@
-import { api } from './api'
 import type { Statistics, OperatorPerformance, Conversation, PaginatedResponse } from '@/types'
+import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface ReportFilters {
   startDate?: string
@@ -9,24 +9,30 @@ interface ReportFilters {
 
 export const reportService = {
   async getStatistics(filters: ReportFilters = {}): Promise<Statistics> {
-    const { data } = await api.get<Statistics>('/reports/statistics', { params: filters })
-    return data
+    logStubCall('reportService', 'getStatistics')
+    return {
+      totalConversations: 0,
+      activeConversations: 0,
+      closedConversations: 0,
+      totalMessages: 0,
+      averageResponseTime: 0,
+      responseRate: 0
+    }
   },
 
   async getFinishedConversations(
     filters: ReportFilters & { page?: number; limit?: number } = {}
   ): Promise<PaginatedResponse<Conversation>> {
-    const { data } = await api.get<PaginatedResponse<Conversation>>('/reports/finished-conversations', {
-      params: filters
+    logStubCall('reportService', 'getFinishedConversations')
+    return createEmptyPaginated<Conversation>({
+      page: filters.page,
+      limit: filters.limit
     })
-    return data
   },
 
   async getOperatorPerformance(filters: ReportFilters = {}): Promise<OperatorPerformance[]> {
-    const { data } = await api.get<OperatorPerformance[]>('/reports/operator-performance', {
-      params: filters
-    })
-    return data
+    logStubCall('reportService', 'getOperatorPerformance')
+    return []
   }
 }
 

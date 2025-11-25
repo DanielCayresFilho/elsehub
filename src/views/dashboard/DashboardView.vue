@@ -181,8 +181,6 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
-import { conversationService } from '@/services/conversation.service'
-import { reportService } from '@/services/report.service'
 import type { Conversation, Statistics } from '@/types'
 
 const router = useRouter()
@@ -203,42 +201,31 @@ const stats = ref<Statistics>({
 
 const isOperator = computed(() => authStore.isOperator)
 
-const loadDashboardData = async () => {
+const loadDashboardData = () => {
   loading.value = true
-  
-  // Verify token before loading
-  const token = localStorage.getItem('accessToken')
-  console.log('Dashboard: Loading data with token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN')
-  
-  if (!token || token === 'undefined') {
-    console.error('Dashboard: No valid token found, redirecting to login')
-    window.location.href = '/login'
-    return
+  recentConversations.value = [
+    {
+      id: 'conv-dashboard-1',
+      contactId: 'contact-demo',
+      contactName: 'Cliente Demo',
+      serviceInstanceId: 'instance-demo',
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastMessageAt: new Date().toISOString(),
+      lastMessagePreview: 'Exemplo de conversa em andamento.',
+      lastMessageDirection: 'INBOUND'
+    } as Conversation
+  ]
+  stats.value = {
+    totalConversations: 24,
+    activeConversations: 6,
+    closedConversations: 18,
+    totalMessages: 180,
+    averageResponseTime: 65,
+    responseRate: 92
   }
-  
-  try {
-    console.log('Dashboard: Fetching conversations and stats...')
-    
-    const [conversationsData, statsData] = await Promise.all([
-      conversationService.getConversations(1, 10),
-      reportService.getStatistics()
-    ])
-    
-    console.log('Dashboard: Data loaded successfully')
-    
-    recentConversations.value = conversationsData.data
-    stats.value = statsData
-  } catch (error: any) {
-    console.error('Dashboard: Error loading data:', error)
-    
-    if (error.response?.status === 401) {
-      console.error('Dashboard: 401 error, clearing auth and redirecting')
-      localStorage.clear()
-      window.location.href = '/login'
-    }
-  } finally {
-    loading.value = false
-  }
+  loading.value = false
 }
 
 const getInitials = (name: string) => {

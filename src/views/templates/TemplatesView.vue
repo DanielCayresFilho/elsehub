@@ -57,8 +57,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { templateService } from '@/services/template.service'
-import { serviceInstanceService } from '@/services/service-instance.service'
 import type { Template } from '@/types'
 
 const templates = ref<Template[]>([])
@@ -71,24 +69,23 @@ const form = ref({
   serviceInstanceId: ''
 })
 
-const loadTemplates = async () => {
-  try {
-    const response = await templateService.getTemplates()
-    templates.value = response.data
-  } catch (error) {
-    console.error('Erro ao carregar templates:', error)
-  }
+const loadTemplates = () => {
+  templates.value = [
+    {
+      id: 'demo-template',
+      name: 'Template demonstração',
+      body: 'Olá {{name}}, esta é uma mensagem estática.',
+      serviceInstanceId: 'stub-instance',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]
 }
 
-const openCreateModal = async () => {
+const openCreateModal = () => {
   editingTemplate.value = null
   form.value = { name: '', body: '', serviceInstanceId: '' }
-  
-  const instances = await serviceInstanceService.getInstances()
-  if (instances.data.length > 0) {
-    form.value.serviceInstanceId = instances.data[0].id
-  }
-  
+  form.value.serviceInstanceId = 'stub-instance'
   showModal.value = true
 }
 
@@ -107,29 +104,27 @@ const closeModal = () => {
   editingTemplate.value = null
 }
 
-const saveTemplate = async () => {
-  try {
-    if (editingTemplate.value) {
-      await templateService.updateTemplate(editingTemplate.value.id, form.value)
-    } else {
-      await templateService.createTemplate(form.value)
-    }
-    closeModal()
-    await loadTemplates()
-  } catch (error) {
-    alert('Erro ao salvar template')
+const saveTemplate = () => {
+  if (editingTemplate.value) {
+    templates.value = templates.value.map(template =>
+      template.id === editingTemplate.value?.id
+        ? { ...template, ...form.value, updatedAt: new Date().toISOString() }
+        : template
+    )
+  } else {
+    templates.value.unshift({
+      id: `template-${Date.now()}`,
+      ...form.value,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
   }
+  closeModal()
 }
 
-const deleteTemplate = async (id: string) => {
+const deleteTemplate = (id: string) => {
   if (!confirm('Tem certeza que deseja excluir este template?')) return
-  
-  try {
-    await templateService.deleteTemplate(id)
-    await loadTemplates()
-  } catch (error) {
-    alert('Erro ao excluir template')
-  }
+  templates.value = templates.value.filter(template => template.id !== id)
 }
 
 onMounted(() => {

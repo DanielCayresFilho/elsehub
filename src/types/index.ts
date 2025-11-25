@@ -45,6 +45,8 @@ export interface LoginRequest {
 export interface LoginResponse {
   accessToken: string
   refreshToken: string
+  accessTokenExpiresIn?: string
+  refreshTokenExpiresIn?: string
   user: User
 }
 
@@ -223,12 +225,6 @@ export interface PaginatedResponse<T> {
     limit: number
     totalPages: number
   }
-}
-
-export interface ApiError {
-  statusCode: number
-  message: string | string[]
-  path: string
 }
 
 // WebSocket Events

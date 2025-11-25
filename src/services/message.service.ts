@@ -1,5 +1,5 @@
-import { api } from './api'
-import type { Message, PaginatedResponse } from '@/types'
+import type { Message } from '@/types'
+import { logStubCall } from './service-stubs'
 
 interface SendMessageRequest {
   conversationId: string
@@ -10,33 +10,30 @@ interface SendMessageRequest {
 export const messageService = {
   // ✅ Conforme documentação: POST /api/messages/send
   async sendMessage(conversationId: string, content: string): Promise<Message> {
-    const payload: SendMessageRequest = {
+    logStubCall('messageService', 'sendMessage')
+    return createMockMessage({
       conversationId,
-      content,
-      via: 'CHAT_MANUAL'
-    }
-    // Conforme documentação: usa /messages/send diretamente
-    const { data } = await api.post<Message>('/messages/send', payload)
-    return data
+      content
+    })
   },
 
   // ✅ Conforme documentação: GET /api/messages/conversation/:conversationId
   // Retorna array direto, não paginado
   async getMessages(conversationId: string, page = 1, limit = 100): Promise<Message[]> {
-    const { data } = await api.get<Message[] | PaginatedResponse<Message>>(`/messages/conversation/${conversationId}`, {
-      params: { page, limit }
-    })
-    
-    // Se retornar array direto, retorna
-    if (Array.isArray(data)) {
-      return data
-    }
-    
-    // Se retornar objeto paginado, retorna data
-    if (data && typeof data === 'object' && 'data' in data) {
-      return (data as PaginatedResponse<Message>).data
-    }
-    
+    logStubCall('messageService', 'getMessages')
     return []
+  }
+}
+
+const createMockMessage = (overrides?: Partial<Message>): Message => {
+  const now = new Date().toISOString()
+  return {
+    id: `stub-message-${Date.now()}`,
+    conversationId: overrides?.conversationId ?? 'stub-conversation',
+    content: overrides?.content ?? 'Mensagem de exemplo. Backend desativado.',
+    createdAt: now,
+    direction: 'OUTBOUND',
+    fromMe: true,
+    ...overrides
   }
 }

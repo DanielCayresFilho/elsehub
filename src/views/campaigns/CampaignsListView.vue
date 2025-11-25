@@ -89,43 +89,44 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { campaignService } from '@/services/campaign.service'
 import type { Campaign } from '@/types'
 
 const campaigns = ref<Campaign[]>([])
 const loading = ref(true)
 
-const loadCampaigns = async () => {
+const loadCampaigns = () => {
   loading.value = true
-  try {
-    const response = await campaignService.getCampaigns(1, 50)
-    campaigns.value = response.data || []
-  } catch (error) {
-    console.error('Erro ao carregar campanhas:', error)
-    campaigns.value = []
-  } finally {
-    loading.value = false
-  }
+  campaigns.value = [
+    {
+      id: 'campaign-demo',
+      name: 'Campanha Demo',
+      status: 'DRAFT',
+      serviceInstanceId: 'instance-demo',
+      delaySeconds: 5,
+      totalContacts: 100,
+      sentCount: 10,
+      failedCount: 2,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as Campaign
+  ]
+  loading.value = false
 }
 
-const startCampaign = async (id: string) => {
-  try {
-    await campaignService.startCampaign(id)
-    await loadCampaigns()
-  } catch (error) {
-    console.error('Erro ao iniciar campanha:', error)
-    alert('Erro ao iniciar campanha')
-  }
+const startCampaign = (id: string) => {
+  campaigns.value = campaigns.value.map(campaign =>
+    campaign.id === id
+      ? { ...campaign, status: 'PROCESSING', updatedAt: new Date().toISOString() }
+      : campaign
+  )
 }
 
-const pauseCampaign = async (id: string) => {
-  try {
-    await campaignService.pauseCampaign(id)
-    await loadCampaigns()
-  } catch (error) {
-    console.error('Erro ao pausar campanha:', error)
-    alert('Erro ao pausar campanha')
-  }
+const pauseCampaign = (id: string) => {
+  campaigns.value = campaigns.value.map(campaign =>
+    campaign.id === id
+      ? { ...campaign, status: 'PAUSED', updatedAt: new Date().toISOString() }
+      : campaign
+  )
 }
 
 const calculateProgress = (campaign: Campaign) => {

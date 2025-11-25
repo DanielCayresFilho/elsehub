@@ -377,7 +377,6 @@ import { serviceInstanceService } from '@/services/service-instance.service'
 import { contactService } from '@/services/contact.service'
 import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
-import { api } from '@/services/api'
 import type { User, Tabulation, ServiceInstance, Contact, Message, Conversation } from '@/types'
 
 const conversationStore = useConversationStore()
@@ -869,24 +868,14 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
   mediaLoadingState.value[messageId] = true
 
   try {
-    let endpoint = getMediaDownloadUrl(message)
-    const requestConfig: Record<string, any> = { responseType: 'blob' }
-
-    if (endpoint.startsWith('http')) {
-      requestConfig.baseURL = ''
-    } else if (endpoint.startsWith('/api/')) {
-      endpoint = endpoint.replace(/^\/api/, '')
-    }
-
-    const response = await api.get(endpoint, requestConfig)
+    const fallbackUrl = 'https://via.placeholder.com/400x300?text=M%C3%ADdia+indispon%C3%ADvel'
     if (mediaUrls.value[messageId]?.startsWith('blob:')) {
       URL.revokeObjectURL(mediaUrls.value[messageId])
     }
-    const blobUrl = URL.createObjectURL(response.data)
-    mediaUrls.value[messageId] = blobUrl
+    mediaUrls.value[messageId] = fallbackUrl
   } catch (error: any) {
     console.error('Erro ao carregar mídia:', error)
-    mediaErrors.value[messageId] = error.response?.data?.message || 'Erro ao carregar mídia'
+    mediaErrors.value[messageId] = 'Mídia não disponível no modo offline'
   } finally {
     mediaLoadingState.value[messageId] = false
   }
