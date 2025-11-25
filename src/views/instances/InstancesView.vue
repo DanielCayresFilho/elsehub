@@ -77,12 +77,12 @@
           <p><strong>Criada em:</strong> {{ formatDate(instance.createdAt) }}</p>
 
           <template v-if="isEvolution(instance)">
-            <p><strong>Instância:</strong> {{ (instance.credentials as EvolutionInstanceCredentials).instanceName }}</p>
-            <p><strong>Servidor:</strong> {{ (instance.credentials as EvolutionInstanceCredentials).serverUrl }}</p>
+            <p><strong>Instância:</strong> {{ getEvolutionInstanceName(instance) }}</p>
+            <p><strong>Servidor:</strong> {{ getEvolutionServerUrl(instance) }}</p>
           </template>
           <template v-else>
-            <p><strong>WABA ID:</strong> {{ (instance.credentials as OfficialMetaInstanceCredentials).wabaId }}</p>
-            <p><strong>Phone ID:</strong> {{ (instance.credentials as OfficialMetaInstanceCredentials).phoneId }}</p>
+            <p><strong>WABA ID:</strong> {{ getMetaWabaId(instance) }}</p>
+            <p><strong>Phone ID:</strong> {{ getMetaPhoneId(instance) }}</p>
           </template>
         </div>
 
@@ -282,6 +282,38 @@ const isEvolution = (instanceOrProvider: ServiceInstance | ServiceProvider): boo
 
 const providerLabel = (provider: ServiceProvider) => {
   return providerOptions.find(option => option.value === provider)?.label ?? provider
+}
+
+const getEvolutionInstanceName = (instance: ServiceInstance): string => {
+  if (isEvolution(instance)) {
+    const creds = instance.credentials as EvolutionInstanceCredentials
+    return creds.instanceName || ''
+  }
+  return ''
+}
+
+const getEvolutionServerUrl = (instance: ServiceInstance): string => {
+  if (isEvolution(instance)) {
+    const creds = instance.credentials as EvolutionInstanceCredentials
+    return creds.serverUrl || ''
+  }
+  return ''
+}
+
+const getMetaWabaId = (instance: ServiceInstance): string => {
+  if (!isEvolution(instance)) {
+    const creds = instance.credentials as OfficialMetaInstanceCredentials
+    return creds.wabaId || ''
+  }
+  return ''
+}
+
+const getMetaPhoneId = (instance: ServiceInstance): string => {
+  if (!isEvolution(instance)) {
+    const creds = instance.credentials as OfficialMetaInstanceCredentials
+    return creds.phoneId || ''
+  }
+  return ''
 }
 
 const instances = ref<ServiceInstance[]>([])
@@ -510,7 +542,7 @@ const qrModalInstance = ref<ServiceInstance | null>(null)
 const qrLoading = ref(false)
 const qrError = ref('')
 const qrCode = ref<QRCodeResponse | null>(null)
-let qrInterval: number | null = null
+let qrInterval: ReturnType<typeof setInterval> | null = null
 
 const fetchQrCode = async (instanceId: string, silent = false) => {
   if (!silent) {
@@ -532,7 +564,7 @@ const fetchQrCode = async (instanceId: string, silent = false) => {
 
 const startQrPolling = (instanceId: string) => {
   stopQrPolling()
-  qrInterval = window.setInterval(() => {
+  qrInterval = setInterval(() => {
     fetchQrCode(instanceId, true)
   }, 7000)
 }
