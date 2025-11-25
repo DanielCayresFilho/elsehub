@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import type { Conversation, Message } from '@/types'
 import { ConversationStatus } from '@/types'
 import { wsService } from '@/services/websocket.service'
+import { conversationService } from '@/services/conversation.service'
+import { messageService } from '@/services/message.service'
 
 const MEDIA_PREVIEW_MAP: Record<string, string> = {
   IMAGE: '[Imagem recebida]',
@@ -160,8 +162,8 @@ export const useConversationStore = defineStore('conversation', () => {
   async function loadConversations() {
     loading.value = true
     try {
-      console.warn('Conversas: backend desativado, carregando lista local.')
-      conversations.value = []
+      const response = await conversationService.getConversations(1, 100, ConversationStatus.OPEN)
+      conversations.value = response.data.map(conv => enrichConversation(conv))
       sortConversations()
     } catch (error) {
       console.error('Erro ao carregar conversas:', error)
@@ -171,41 +173,53 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   async function selectConversation(conversationId: string) {
-    console.log('Selecionando conversa (stub):', conversationId)
+    console.log('Selecionando conversa:', conversationId)
     const isSameConversation = activeConversation.value?.id === conversationId
 
-    const baseConversation = ensureConversationPresence(conversationId)
-    const enriched = enrichConversation(baseConversation)
-    activeConversation.value = enriched
+    try {
+      // Busca a conversa completa com mensagens
+      const conversation = await conversationService.getConversation(conversationId)
+      const enriched = enrichConversation(conversation)
+      activeConversation.value = enriched
 
-    const existingIndex = conversations.value.findIndex(c => c.id === conversationId)
-    if (existingIndex !== -1) {
-      conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...enriched }
-    } else {
-      addConversation(enriched)
+      const existingIndex = conversations.value.findIndex(c => c.id === conversationId)
+      if (existingIndex !== -1) {
+        conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...enriched }
+      } else {
+        addConversation(enriched)
+      }
+      clearUnread(conversationId)
+
+      // Carrega mensagens se não for a mesma conversa ou se não houver mensagens
+      if (!isSameConversation || messages.value.length === 0) {
+        const conversationMessages = await messageService.getMessages(conversationId, 1, 100)
+        messages.value = conversationMessages.length > 0 
+          ? conversationMessages 
+          : (enriched.messages || [])
+      }
+
+      messages.value.sort((a, b) => {
+        const dateA = new Date(a.timestamp || a.createdAt).getTime()
+        const dateB = new Date(b.timestamp || b.createdAt).getTime()
+        return dateA - dateB
+      })
+
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage) {
+        updateConversationMetadata(conversationId, lastMessage)
+      }
+
+      if (!wsService.isConnected()) {
+        await wsService.connect()
+      }
+      wsService.joinRoom(conversationId)
+    } catch (error) {
+      console.error('Erro ao selecionar conversa:', error)
+      // Fallback para conversa stub em caso de erro
+      const baseConversation = ensureConversationPresence(conversationId)
+      const enriched = enrichConversation(baseConversation)
+      activeConversation.value = enriched
     }
-    clearUnread(conversationId)
-
-    messages.value = isSameConversation ? [...messages.value] : []
-    if (messages.value.length === 0) {
-      messages.value = enriched.messages?.length ? [...enriched.messages] : [createDemoMessage(conversationId)]
-    }
-
-    messages.value.sort((a, b) => {
-      const dateA = new Date(a.timestamp || a.createdAt).getTime()
-      const dateB = new Date(b.timestamp || b.createdAt).getTime()
-      return dateA - dateB
-    })
-
-    const lastMessage = messages.value[messages.value.length - 1]
-    if (lastMessage) {
-      updateConversationMetadata(conversationId, lastMessage)
-    }
-
-    if (!wsService.isConnected()) {
-      wsService.connect()
-    }
-    wsService.joinRoom(conversationId)
   }
 
   function addMessage(message: Message) {
@@ -266,37 +280,57 @@ export const useConversationStore = defineStore('conversation', () => {
     sortConversations()
   }
 
-  async function closeConversation(conversationId: string, _tabulationId: string) {
-    console.warn('Fechando conversa (stub):', conversationId)
-    conversations.value = conversations.value.filter(c => c.id !== conversationId)
-    if (activeConversation.value?.id === conversationId) {
-      activeConversation.value = null
-      messages.value = []
+  async function closeConversation(conversationId: string, tabulationId: string) {
+    try {
+      await conversationService.closeConversation(conversationId, tabulationId)
+      conversations.value = conversations.value.filter(c => c.id !== conversationId)
+      if (activeConversation.value?.id === conversationId) {
+        activeConversation.value = null
+        messages.value = []
+      }
+    } catch (error) {
+      console.error('Erro ao fechar conversa:', error)
+      throw error
     }
   }
 
   function setupWebSocketListeners() {
     console.log('Configurando listeners do WebSocket...')
     
-    // Escuta evento message:new conforme documentação
-    wsService.on('message:new', (message: Message) => {
-      console.log('🔔 Nova mensagem recebida via WebSocket:', message)
+    // Escuta evento new_message conforme documentação do backend
+    // Payload: { conversationId: string, message: Message }
+    wsService.on('new_message', (data: { conversationId: string; message: Message }) => {
+      console.log('🔔 Nova mensagem recebida via WebSocket:', data)
+      const { conversationId, message } = data
       console.log('🔔 Detalhes:', {
         id: message.id,
-        conversationId: message.conversationId,
+        conversationId,
         direction: message.direction,
         content: message.content?.substring(0, 50),
         senderName: message.senderName,
         fromMe: (message as any).fromMe
       })
       console.log('Conversa ativa:', activeConversation.value?.id)
-      console.log('Conversa da mensagem:', message.conversationId)
-      console.log('É da conversa ativa?', activeConversation.value?.id === message.conversationId)
-      ensureConversationPresence(message.conversationId)
+      console.log('Conversa da mensagem:', conversationId)
+      console.log('É da conversa ativa?', activeConversation.value?.id === conversationId)
+      ensureConversationPresence(conversationId)
       addMessage(message)
     })
 
-    wsService.on('conversation:updated', (conversation: Conversation) => {
+    // Escuta atualizações de status de mensagens
+    wsService.on('message_updated', (data: { conversationId: string; message: Message }) => {
+      console.log('🔔 Mensagem atualizada via WebSocket:', data)
+      const { conversationId, message } = data
+      // Atualiza a mensagem na lista se estiver na conversa ativa
+      if (activeConversation.value?.id === conversationId) {
+        const index = messages.value.findIndex(m => m.id === message.id)
+        if (index !== -1) {
+          messages.value[index] = { ...messages.value[index], ...message }
+        }
+      }
+    })
+
+    wsService.on('conversation_updated', (conversation: Conversation) => {
       console.log('Conversa atualizada via WebSocket:', conversation)
       const normalized = enrichConversation(conversation)
       const index = conversations.value.findIndex(c => c.id === normalized.id)

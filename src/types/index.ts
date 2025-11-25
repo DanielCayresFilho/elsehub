@@ -171,7 +171,11 @@ export interface Message {
   mediaMimeType?: string
   mediaSize?: number
   mediaCaption?: string | null
-  mediaDownloadPath?: string
+  mediaUrl?: string // URL original da mídia (Evolution/Meta)
+  mediaPublicUrl?: string // URL pública da mídia salva localmente (/media/messages/...)
+  mediaStoragePath?: string // Caminho relativo onde a mídia foi salva (storage/messages/...)
+  mediaDownloadPath?: string // Path para download via API (/api/messages/:id/media)
+  via?: 'INBOUND' | 'CAMPAIGN' | 'CHAT_MANUAL' // Como a mensagem foi enviada/recebida
 }
 
 // Campaign Types

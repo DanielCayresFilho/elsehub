@@ -832,7 +832,9 @@ const getMediaSrc = (message: Message) => mediaUrls.value[message.id] || resolve
 const isMediaExpired = (message: Message) => message.hasMedia && !hasMediaSource(message) && !message.mediaDownloadPath
 const getMediaDownloadUrl = (message: Message) => {
   if (message.mediaDownloadPath) return resolveApiUrl(message.mediaDownloadPath)
-  return `/messages/${message.id}/media`
+  // Conforme documentação: GET /api/messages/:id/media
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+  return `${apiBase}/messages/${message.id}/media`
 }
 const isMediaLoading = (messageId: string) => !!mediaLoadingState.value[messageId]
 const getMediaLabel = (message: Message) => message.mediaFileName || getMessagePreviewLabel(message)

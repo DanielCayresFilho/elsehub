@@ -1,6 +1,6 @@
+import { api } from './api'
 import type { Conversation, PaginatedResponse } from '@/types'
 import { ConversationStatus } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface CreateConversationRequest {
   contactId: string
@@ -16,55 +16,63 @@ interface CloseConversationRequest {
 }
 
 export const conversationService = {
-  async getConversations(page = 1, limit = 10): Promise<PaginatedResponse<Conversation>> {
-    logStubCall('conversationService', 'getConversations')
-    return createEmptyPaginated<Conversation>({ page, limit })
-  },
-
-  async getConversation(id: string): Promise<Conversation> {
-    logStubCall('conversationService', 'getConversation')
-    return createMockConversation({ id })
-  },
-
-  async createConversation(conversationData: CreateConversationRequest): Promise<Conversation> {
-    logStubCall('conversationService', 'createConversation')
-    return createMockConversation({
-      id: 'stub-conversation',
-      contactId: conversationData.contactId,
-      serviceInstanceId: conversationData.serviceInstanceId
+  /**
+   * GET /api/conversations
+   * Lista conversas com paginação
+   */
+  async getConversations(page = 1, limit = 10, status?: ConversationStatus): Promise<PaginatedResponse<Conversation>> {
+    const { data } = await api.get<PaginatedResponse<Conversation>>('/conversations', {
+      params: {
+        page,
+        limit,
+        ...(status && { status })
+      }
     })
+    return data
   },
 
+  /**
+   * GET /api/conversations/:id
+   * Busca uma conversa específica com suas mensagens
+   */
+  async getConversation(id: string): Promise<Conversation> {
+    const { data } = await api.get<Conversation>(`/conversations/${id}`)
+    return data
+  },
+
+  /**
+   * POST /api/conversations
+   * Cria uma nova conversa
+   */
+  async createConversation(conversationData: CreateConversationRequest): Promise<Conversation> {
+    const { data } = await api.post<Conversation>('/conversations', conversationData)
+    return data
+  },
+
+  /**
+   * PATCH /api/conversations/:id/assign
+   * Atribui um operador à conversa
+   */
   async assignOperator(id: string, operatorId: string): Promise<Conversation> {
-    logStubCall('conversationService', 'assignOperator')
-    return createMockConversation({ id, operatorId })
+    const { data } = await api.patch<Conversation>(`/conversations/${id}/assign`, { operatorId })
+    return data
   },
 
+  /**
+   * PATCH /api/conversations/:id/close
+   * Fecha uma conversa com motivo de tabulação
+   */
   async closeConversation(id: string, tabulationId: string): Promise<void> {
-    logStubCall('conversationService', 'closeConversation')
+    await api.patch(`/conversations/${id}/close`, { tabulationId })
   },
 
+  /**
+   * GET /api/conversations/queued
+   * Lista conversas na fila (sem operador atribuído)
+   */
   async getQueue(): Promise<Conversation[]> {
-    logStubCall('conversationService', 'getQueue')
-    return []
-  }
-}
-
-const createMockConversation = (overrides?: Partial<Conversation>): Conversation => {
-  const now = new Date().toISOString()
-  return {
-    id: 'stub-conversation-id',
-    contactId: 'stub-contact',
-    serviceInstanceId: 'stub-instance',
-    status: ConversationStatus.OPEN,
-    createdAt: now,
-    updatedAt: now,
-    contactName: 'Contato Demo',
-    operatorId: undefined,
-    operatorName: undefined,
-    messages: [],
-    unreadCount: 0,
-    ...overrides
+    const { data } = await api.get<Conversation[]>('/conversations/queued')
+    return data
   }
 }
 

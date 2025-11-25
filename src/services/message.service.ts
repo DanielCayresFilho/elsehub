@@ -1,39 +1,60 @@
+import { api } from './api'
 import type { Message } from '@/types'
-import { logStubCall } from './service-stubs'
 
 interface SendMessageRequest {
   conversationId: string
   content: string
-  via: string
+  via?: 'CHAT_MANUAL' | 'CAMPAIGN'
 }
 
 export const messageService = {
-  // ✅ Conforme documentação: POST /api/messages/send
-  async sendMessage(conversationId: string, content: string): Promise<Message> {
-    logStubCall('messageService', 'sendMessage')
-    return createMockMessage({
+  /**
+   * POST /api/messages
+   * Envia uma mensagem para uma conversa
+   * Conforme documentação: POST /api/messages
+   */
+  async sendMessage(conversationId: string, content: string, via: 'CHAT_MANUAL' | 'CAMPAIGN' = 'CHAT_MANUAL'): Promise<Message> {
+    const { data } = await api.post<Message>('/messages', {
       conversationId,
-      content
+      content,
+      via
     })
+    return data
   },
 
-  // ✅ Conforme documentação: GET /api/messages/conversation/:conversationId
-  // Retorna array direto, não paginado
+  /**
+   * GET /api/messages/conversation/:conversationId
+   * Lista mensagens de uma conversa
+   * Conforme documentação: retorna array direto, não paginado
+   */
   async getMessages(conversationId: string, page = 1, limit = 100): Promise<Message[]> {
-    logStubCall('messageService', 'getMessages')
-    return []
-  }
-}
+    const { data } = await api.get<Message[]>(`/messages/conversation/${conversationId}`, {
+      params: {
+        page,
+        limit
+      }
+    })
+    return data
+  },
 
-const createMockMessage = (overrides?: Partial<Message>): Message => {
-  const now = new Date().toISOString()
-  return {
-    id: `stub-message-${Date.now()}`,
-    conversationId: overrides?.conversationId ?? 'stub-conversation',
-    content: overrides?.content ?? 'Mensagem de exemplo. Backend desativado.',
-    createdAt: now,
-    direction: 'OUTBOUND',
-    fromMe: true,
-    ...overrides
+  /**
+   * GET /api/messages/:id
+   * Busca uma mensagem específica
+   */
+  async getMessage(id: string): Promise<Message> {
+    const { data } = await api.get<Message>(`/messages/${id}`)
+    return data
+  },
+
+  /**
+   * GET /api/messages/:id/media
+   * Baixa mídia de uma mensagem
+   * Retorna o arquivo como blob/stream
+   */
+  async getMedia(id: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/messages/${id}/media`, {
+      responseType: 'blob'
+    })
+    return data
   }
 }
