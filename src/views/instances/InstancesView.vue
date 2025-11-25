@@ -875,5 +875,4 @@ onMounted(() => {
   cursor: pointer;
 }
 </style>
-</style>
 
