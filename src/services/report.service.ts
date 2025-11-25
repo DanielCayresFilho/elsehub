@@ -1,38 +1,71 @@
-import type { Statistics, OperatorPerformance, Conversation, PaginatedResponse } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
+import { api } from './api'
+import type { Statistics, OperatorPerformance, Conversation } from '@/types'
 
 interface ReportFilters {
   startDate?: string
   endDate?: string
   operatorId?: string
+  serviceInstanceId?: string
+  tabulationId?: string
+}
+
+interface StatisticsResponse {
+  totalConversations: number
+  openConversations: number
+  closedConversations: number
+  totalMessages: number
+  inboundMessages: number
+  outboundMessages: number
+  avgResponseTime: number
+  avgConversationDuration: number
 }
 
 export const reportService = {
-  async getStatistics(filters: ReportFilters = {}): Promise<Statistics> {
-    logStubCall('reportService', 'getStatistics')
-    return {
-      totalConversations: 0,
-      activeConversations: 0,
-      closedConversations: 0,
-      totalMessages: 0,
-      averageResponseTime: 0,
-      responseRate: 0
-    }
-  },
-
-  async getFinishedConversations(
-    filters: ReportFilters & { page?: number; limit?: number } = {}
-  ): Promise<PaginatedResponse<Conversation>> {
-    logStubCall('reportService', 'getFinishedConversations')
-    return createEmptyPaginated<Conversation>({
-      page: filters.page,
-      limit: filters.limit
+  /**
+   * GET /api/reports/statistics
+   * Retorna estatísticas gerais do sistema
+   */
+  async getStatistics(filters: ReportFilters = {}): Promise<StatisticsResponse> {
+    const { data } = await api.get<StatisticsResponse>('/reports/statistics', {
+      params: filters
     })
+    return data
   },
 
+  /**
+   * GET /api/reports/finished-conversations
+   * Lista conversas finalizadas com filtros
+   * Retorna array direto, não paginado
+   */
+  async getFinishedConversations(filters: ReportFilters = {}): Promise<Conversation[]> {
+    const { data } = await api.get<Conversation[]>('/reports/finished-conversations', {
+      params: filters
+    })
+    return data
+  },
+
+  /**
+   * GET /api/reports/finished-conversations/export
+   * Exporta conversas finalizadas como CSV
+   */
+  async exportFinishedConversations(filters: ReportFilters = {}): Promise<Blob> {
+    const { data } = await api.get<Blob>('/reports/finished-conversations/export', {
+      params: filters,
+      responseType: 'blob'
+    })
+    return data
+  },
+
+  /**
+   * GET /api/reports/operator-performance
+   * Retorna performance de operadores
+   * Retorna array direto, não paginado
+   */
   async getOperatorPerformance(filters: ReportFilters = {}): Promise<OperatorPerformance[]> {
-    logStubCall('reportService', 'getOperatorPerformance')
-    return []
+    const { data } = await api.get<OperatorPerformance[]>('/reports/operator-performance', {
+      params: filters
+    })
+    return data
   }
 }
 

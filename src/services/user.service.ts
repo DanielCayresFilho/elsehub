@@ -1,75 +1,94 @@
+import { api } from './api'
 import type { User, PaginatedResponse } from '@/types'
 import { UserRole } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
 
 interface CreateUserRequest {
   name: string
   email: string
   password: string
-  role: string
+  role: UserRole
   isActive?: boolean
 }
 
 interface UpdateUserRequest {
   name?: string
-  isActive?: boolean
+  email?: string
   password?: string
+  role?: UserRole
+  isActive?: boolean
 }
 
-const now = () => new Date().toISOString()
-
-const createMockUser = (overrides?: Partial<User>): User => ({
-  id: 'stub-user',
-  name: 'Usuário Demo',
-  email: 'demo@example.com',
-  role: UserRole.ADMIN,
-  isActive: true,
-  isOnline: false,
-  createdAt: now(),
-  updatedAt: now(),
-  ...overrides
-})
+interface ToggleOnlineRequest {
+  isOnline: boolean
+}
 
 export const userService = {
-  async getUsers(page = 1, limit = 10): Promise<PaginatedResponse<User>> {
-    logStubCall('userService', 'getUsers')
-    return createEmptyPaginated<User>({ page, limit })
-  },
-
-  async createUser(userData: CreateUserRequest): Promise<User> {
-    logStubCall('userService', 'createUser')
-    return createMockUser({
-      id: 'stub-created-user',
-      name: userData.name,
-      email: userData.email,
-      role: userData.role as UserRole
+  /**
+   * GET /api/users
+   * Lista todos os usuários com paginação
+   */
+  async getUsers(page = 1, limit = 25): Promise<User[]> {
+    const { data } = await api.get<User[]>('/users', {
+      params: {
+        page,
+        limit
+      }
     })
+    return data
   },
 
-  async updateUser(id: string, userData: UpdateUserRequest): Promise<User> {
-    logStubCall('userService', 'updateUser')
-    return createMockUser({
-      id,
-      name: userData.name ?? 'Usuário Atualizado',
-      isActive: userData.isActive ?? true
-    })
+  /**
+   * GET /api/users/me
+   * Retorna o usuário atual (autenticado)
+   */
+  async getMe(): Promise<User> {
+    const { data } = await api.get<User>('/users/me')
+    return data
   },
 
-  async deleteUser(id: string): Promise<void> {
-    logStubCall('userService', `deleteUser:${id}`)
-  },
-
-  async toggleOnline(isOnline: boolean): Promise<User> {
-    logStubCall('userService', 'toggleOnline')
-    return createMockUser({
-      id: 'stub-user',
-      isOnline
-    })
-  },
-
+  /**
+   * GET /api/users/online
+   * Lista todos os operadores online
+   * Retorna array direto, não paginado
+   */
   async getOnlineOperators(): Promise<User[]> {
-    logStubCall('userService', 'getOnlineOperators')
-    return []
+    const { data } = await api.get<User[]>('/users/online')
+    return data
+  },
+
+  /**
+   * POST /api/users
+   * Cria um novo usuário
+   */
+  async createUser(userData: CreateUserRequest): Promise<User> {
+    const { data } = await api.post<User>('/users', userData)
+    return data
+  },
+
+  /**
+   * PATCH /api/users/:id
+   * Atualiza um usuário
+   */
+  async updateUser(id: string, userData: UpdateUserRequest): Promise<User> {
+    const { data } = await api.patch<User>(`/users/${id}`, userData)
+    return data
+  },
+
+  /**
+   * DELETE /api/users/:id
+   * Remove um usuário
+   */
+  async deleteUser(id: string): Promise<void> {
+    await api.delete(`/users/${id}`)
+  },
+
+  /**
+   * PATCH /api/users/me/toggle-online
+   * Alterna o status online do usuário atual
+   */
+  async toggleOnline(isOnline: boolean): Promise<User> {
+    const { data } = await api.patch<User>('/users/me/toggle-online', { isOnline })
+    return data
   }
 }
 

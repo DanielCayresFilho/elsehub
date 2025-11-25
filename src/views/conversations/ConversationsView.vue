@@ -187,7 +187,16 @@
                 </p>
               </div>
               <p v-if="shouldShowMessageText(message)" class="message-content">{{ message.content }}</p>
-              <span class="message-time">{{ formatMessageTime(message.timestamp || message.createdAt) }}</span>
+              <div class="message-footer">
+                <span class="message-time">{{ formatMessageTime(message.timestamp || message.createdAt) }}</span>
+                <span v-if="message.direction === 'OUTBOUND' && message.status" class="message-status" :class="`status-${message.status}`">
+                  <i v-if="message.status === 'pending'" class="fas fa-clock" title="Enviando..."></i>
+                  <i v-else-if="message.status === 'sent'" class="fas fa-check" title="Enviado"></i>
+                  <i v-else-if="message.status === 'delivered'" class="fas fa-check-double" title="Entregue"></i>
+                  <i v-else-if="message.status === 'read'" class="fas fa-check-double" style="color: #4fc3f7;" title="Lido"></i>
+                  <i v-else-if="message.status === 'failed'" class="fas fa-exclamation-circle" title="Falha ao enviar"></i>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -555,7 +564,36 @@ const sendMessage = async () => {
     console.error('Erro ao enviar mensagem:', error)
     // Restaurar mensagem em caso de erro
     newMessage.value = messageContent
-    alert(error.response?.data?.message || 'Erro ao enviar mensagem')
+    
+    // Tratamento de erros mais específico
+    let errorMessage = 'Erro ao enviar mensagem'
+    
+    if (error.response) {
+      const status = error.response.status
+      const data = error.response.data
+      
+      if (status === 404) {
+        errorMessage = 'Conversa não encontrada. Por favor, recarregue a página.'
+      } else if (status === 400) {
+        errorMessage = data?.message || 'Dados inválidos. Verifique a mensagem.'
+      } else if (status === 401) {
+        errorMessage = 'Sessão expirada. Por favor, faça login novamente.'
+        // Opcional: redirecionar para login
+        // window.location.href = '/login'
+      } else if (status === 403) {
+        errorMessage = 'Você não tem permissão para enviar mensagens nesta conversa.'
+      } else if (status === 500) {
+        errorMessage = 'Erro interno do servidor. Tente novamente em alguns instantes.'
+      } else {
+        errorMessage = data?.message || `Erro ao enviar mensagem (${status})`
+      }
+    } else if (error.request) {
+      errorMessage = 'Não foi possível conectar ao servidor. Verifique sua conexão.'
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   }
 }
 
@@ -735,7 +773,7 @@ const loadOperatorsAndTabulations = async () => {
       tabulationService.getTabulations()
     ])
     onlineOperators.value = operatorsData
-    tabulations.value = tabulationsData.data
+    tabulations.value = tabulationsData
   } catch (error) {
     console.error('Erro ao carregar dados:', error)
   }
@@ -1478,9 +1516,57 @@ onUnmounted(() => {
     word-wrap: break-word;
   }
 
+  .message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: $spacing-xs;
+    margin-top: $spacing-xs;
+  }
+
   .message-time {
     font-size: 0.75rem;
     opacity: 0.7;
+  }
+
+  .message-status {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    display: inline-flex;
+    align-items: center;
+
+    i {
+      font-size: 0.7rem;
+    }
+
+    &.status-pending {
+      color: $text-secondary-light;
+      .dark & {
+        color: $text-secondary-dark;
+      }
+    }
+
+    &.status-sent {
+      color: $text-secondary-light;
+      .dark & {
+        color: $text-secondary-dark;
+      }
+    }
+
+    &.status-delivered {
+      color: $text-secondary-light;
+      .dark & {
+        color: $text-secondary-dark;
+      }
+    }
+
+    &.status-read {
+      color: #4fc3f7;
+    }
+
+    &.status-failed {
+      color: $error;
+    }
   }
   
   // Quando contém mídia, aumenta um pouco o padding
@@ -1790,6 +1876,59 @@ onUnmounted(() => {
       opacity: 0.5;
       cursor: not-allowed;
     }
+  }
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  color: $text-secondary-light;
+  font-size: 0.875rem;
+
+  .dark & {
+    color: $text-secondary-dark;
+  }
+
+  .typing-dots {
+    display: flex;
+    gap: 0.25rem;
+
+    span {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: $text-secondary-light;
+      animation: typing 1.4s infinite;
+
+      .dark & {
+        background: $text-secondary-dark;
+      }
+
+      &:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      &:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+    }
+  }
+
+  .typing-text {
+    font-style: italic;
+  }
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-0.5rem);
+    opacity: 1;
   }
 }
 </style>

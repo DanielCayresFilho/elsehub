@@ -9,12 +9,12 @@ interface SendMessageRequest {
 
 export const messageService = {
   /**
-   * POST /api/messages
+   * POST /api/messages/send
    * Envia uma mensagem para uma conversa
-   * Conforme documentação: POST /api/messages
+   * Conforme documentação: POST /api/messages/send
    */
   async sendMessage(conversationId: string, content: string, via: 'CHAT_MANUAL' | 'CAMPAIGN' = 'CHAT_MANUAL'): Promise<Message> {
-    const { data } = await api.post<Message>('/messages', {
+    const { data } = await api.post<Message>('/messages/send', {
       conversationId,
       content,
       via

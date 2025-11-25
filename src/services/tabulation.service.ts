@@ -1,38 +1,58 @@
-import type { Tabulation, PaginatedResponse } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
+import { api } from './api'
+import type { Tabulation } from '@/types'
 
 interface CreateTabulationRequest {
   name: string
 }
 
-export const tabulationService = {
-  async getTabulations(page = 1, limit = 10): Promise<PaginatedResponse<Tabulation>> {
-    logStubCall('tabulationService', 'getTabulations')
-    return createEmptyPaginated<Tabulation>({ page, limit })
-  },
-
-  async createTabulation(tabulationData: CreateTabulationRequest): Promise<Tabulation> {
-    logStubCall('tabulationService', 'createTabulation')
-    return createMockTabulation({ name: tabulationData.name })
-  },
-
-  async updateTabulation(id: string, tabulationData: CreateTabulationRequest): Promise<Tabulation> {
-    logStubCall('tabulationService', 'updateTabulation')
-    return createMockTabulation({ id, name: tabulationData.name })
-  },
-
-  async deleteTabulation(id: string): Promise<void> {
-    logStubCall('tabulationService', `deleteTabulation:${id}`)
-  }
+interface UpdateTabulationRequest {
+  name?: string
 }
 
-const createMockTabulation = (overrides?: Partial<Tabulation>): Tabulation => {
-  const now = new Date().toISOString()
-  return {
-    id: overrides?.id ?? 'stub-tabulation',
-    name: overrides?.name ?? 'Tabulação Demo',
-    createdAt: now,
-    updatedAt: now
+export const tabulationService = {
+  /**
+   * GET /api/tabulations
+   * Lista todas as tabulações
+   * Retorna array direto, não paginado
+   */
+  async getTabulations(): Promise<Tabulation[]> {
+    const { data } = await api.get<Tabulation[]>('/tabulations')
+    return data
+  },
+
+  /**
+   * GET /api/tabulations/:id
+   * Retorna uma tabulação por ID
+   */
+  async getTabulation(id: string): Promise<Tabulation> {
+    const { data } = await api.get<Tabulation>(`/tabulations/${id}`)
+    return data
+  },
+
+  /**
+   * POST /api/tabulations
+   * Cria uma nova tabulação
+   */
+  async createTabulation(tabulationData: CreateTabulationRequest): Promise<Tabulation> {
+    const { data } = await api.post<Tabulation>('/tabulations', tabulationData)
+    return data
+  },
+
+  /**
+   * PATCH /api/tabulations/:id
+   * Atualiza uma tabulação
+   */
+  async updateTabulation(id: string, tabulationData: UpdateTabulationRequest): Promise<Tabulation> {
+    const { data } = await api.patch<Tabulation>(`/tabulations/${id}`, tabulationData)
+    return data
+  },
+
+  /**
+   * DELETE /api/tabulations/:id
+   * Remove uma tabulação
+   */
+  async deleteTabulation(id: string): Promise<void> {
+    await api.delete(`/tabulations/${id}`)
   }
 }
 

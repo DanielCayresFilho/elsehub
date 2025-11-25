@@ -6,6 +6,7 @@ class WebSocketService {
   private socket: Socket | null = null
   private listeners: Map<string, Set<Function>> = new Map()
   private wsUrl: string
+  private joinedRooms: Set<string> = new Set() // Rastreia salas que entrou
 
   constructor() {
     // Obtém a URL do WebSocket da variável de ambiente
@@ -39,6 +40,11 @@ class WebSocketService {
 
       this.socket.on('connect', () => {
         console.log('[WebSocket] Conectado com sucesso')
+        // Reentra em todas as salas que estava antes da desconexão
+        this.joinedRooms.forEach(roomId => {
+          console.log('[WebSocket] Reentrando na sala:', roomId)
+          this.socket?.emit('conversation:join', { conversationId: roomId })
+        })
       })
 
       this.socket.on('disconnect', (reason) => {
@@ -49,22 +55,28 @@ class WebSocketService {
         console.error('[WebSocket] Erro de conexão:', error)
       })
 
-      // Escuta eventos de novas mensagens
-      this.socket.on('new_message', (data: { conversationId: string; message: Message }) => {
-        console.log('[WebSocket] Nova mensagem recebida:', data)
-        this.emit('new_message', data)
+      // Escuta eventos de novas mensagens (conforme documentação: message:new)
+      this.socket.on('message:new', (message: Message) => {
+        console.log('[WebSocket] Nova mensagem recebida:', message)
+        this.emit('new_message', { conversationId: message.conversationId, message })
       })
 
-      // Escuta atualizações de status de mensagens
-      this.socket.on('message_updated', (data: { conversationId: string; message: Message }) => {
-        console.log('[WebSocket] Mensagem atualizada:', data)
-        this.emit('message_updated', data)
+      // Escuta atualizações de conversas (conforme documentação: conversation:updated)
+      this.socket.on('conversation:updated', (conversation: Conversation) => {
+        console.log('[WebSocket] Conversa atualizada:', conversation)
+        this.emit('conversation_updated', conversation)
       })
 
-      // Escuta atualizações de conversas
-      this.socket.on('conversation_updated', (data: Conversation) => {
-        console.log('[WebSocket] Conversa atualizada:', data)
-        this.emit('conversation_updated', data)
+      // Escuta fechamento de conversas (conforme documentação: conversation:closed)
+      this.socket.on('conversation:closed', (data: { conversationId: string } | Conversation) => {
+        console.log('[WebSocket] Conversa fechada:', data)
+        this.emit('conversation:closed', data)
+      })
+
+      // Escuta indicadores de digitação (conforme documentação: typing:user)
+      this.socket.on('typing:user', (data: { userId: string; email: string; isTyping: boolean }) => {
+        console.log('[WebSocket] Usuário digitando:', data)
+        this.emit('typing:user', data)
       })
 
     } catch (error) {
@@ -75,32 +87,42 @@ class WebSocketService {
   joinRoom(conversationId: string) {
     if (!this.socket?.connected) {
       console.warn('[WebSocket] Não conectado, não é possível entrar na sala')
+      // Adiciona à lista para entrar quando reconectar
+      this.joinedRooms.add(conversationId)
       return
     }
     console.log('[WebSocket] Entrando na sala:', conversationId)
-    this.socket.emit('join_room', { conversationId })
+    // Conforme documentação: conversation:join
+    this.socket.emit('conversation:join', { conversationId })
+    this.joinedRooms.add(conversationId)
   }
 
   leaveRoom(conversationId: string) {
     if (!this.socket?.connected) {
+      // Remove da lista mesmo se não estiver conectado
+      this.joinedRooms.delete(conversationId)
       return
     }
     console.log('[WebSocket] Saindo da sala:', conversationId)
-    this.socket.emit('leave_room', { conversationId })
+    // Conforme documentação: conversation:leave
+    this.socket.emit('conversation:leave', { conversationId })
+    this.joinedRooms.delete(conversationId)
   }
 
   sendTypingStart(conversationId: string) {
     if (!this.socket?.connected) {
       return
     }
-    this.socket.emit('typing_start', { conversationId })
+    // Conforme documentação: typing:start
+    this.socket.emit('typing:start', { conversationId })
   }
 
   sendTypingStop(conversationId: string) {
     if (!this.socket?.connected) {
       return
     }
-    this.socket.emit('typing_stop', { conversationId })
+    // Conforme documentação: typing:stop
+    this.socket.emit('typing:stop', { conversationId })
   }
 
   on(event: string, callback: Function) {
@@ -131,6 +153,7 @@ class WebSocketService {
       this.socket = null
     }
     this.listeners.clear()
+    this.joinedRooms.clear()
   }
 
   isConnected(): boolean {

@@ -1,49 +1,70 @@
-import type { Template, PaginatedResponse } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
+import { api } from './api'
+import type { Template } from '@/types'
 
 interface CreateTemplateRequest {
   name: string
   body: string
+  metaTemplateId?: string
+  language?: string
+  variables?: Record<string, any>
   serviceInstanceId: string
 }
 
-export const templateService = {
-  async getTemplates(page = 1, limit = 10): Promise<PaginatedResponse<Template>> {
-    logStubCall('templateService', 'getTemplates')
-    return createEmptyPaginated<Template>({ page, limit })
-  },
-
-  async createTemplate(templateData: CreateTemplateRequest): Promise<Template> {
-    logStubCall('templateService', 'createTemplate')
-    return createMockTemplate({
-      name: templateData.name,
-      body: templateData.body,
-      serviceInstanceId: templateData.serviceInstanceId
-    })
-  },
-
-  async updateTemplate(id: string, templateData: Partial<CreateTemplateRequest>): Promise<Template> {
-    logStubCall('templateService', 'updateTemplate')
-    return createMockTemplate({
-      id,
-      ...templateData
-    })
-  },
-
-  async deleteTemplate(id: string): Promise<void> {
-    logStubCall('templateService', `deleteTemplate:${id}`)
-  }
+interface UpdateTemplateRequest {
+  name?: string
+  body?: string
+  metaTemplateId?: string
+  language?: string
+  variables?: Record<string, any>
+  serviceInstanceId?: string
 }
 
-const createMockTemplate = (overrides?: Partial<Template>): Template => {
-  const now = new Date().toISOString()
-  return {
-    id: overrides?.id ?? 'stub-template',
-    name: overrides?.name ?? 'Template Demo',
-    body: overrides?.body ?? 'Corpo do template demo.',
-    serviceInstanceId: overrides?.serviceInstanceId ?? 'stub-instance',
-    createdAt: now,
-    updatedAt: now
+export const templateService = {
+  /**
+   * GET /api/templates
+   * Lista templates
+   * Retorna array direto, não paginado
+   */
+  async getTemplates(serviceInstanceId?: string): Promise<Template[]> {
+    const { data } = await api.get<Template[]>('/templates', {
+      params: serviceInstanceId ? { serviceInstanceId } : {}
+    })
+    return data
+  },
+
+  /**
+   * GET /api/templates/:id
+   * Retorna um template por ID
+   */
+  async getTemplate(id: string): Promise<Template> {
+    const { data } = await api.get<Template>(`/templates/${id}`)
+    return data
+  },
+
+  /**
+   * POST /api/templates
+   * Cria um novo template
+   */
+  async createTemplate(templateData: CreateTemplateRequest): Promise<Template> {
+    const { data } = await api.post<Template>('/templates', templateData)
+    return data
+  },
+
+  /**
+   * PATCH /api/templates/:id
+   * Atualiza um template
+   */
+  async updateTemplate(id: string, templateData: UpdateTemplateRequest): Promise<Template> {
+    const { data } = await api.patch<Template>(`/templates/${id}`, templateData)
+    return data
+  },
+
+  /**
+   * DELETE /api/templates/:id
+   * Remove um template
+   */
+  async deleteTemplate(id: string): Promise<void> {
+    await api.delete(`/templates/${id}`)
   }
 }
 

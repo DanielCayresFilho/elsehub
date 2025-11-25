@@ -1,73 +1,90 @@
-import type { Campaign, CreateCampaignRequest, PaginatedResponse } from '@/types'
-import { CampaignStatus } from '@/types'
-import { createEmptyPaginated, logStubCall } from './service-stubs'
+import { api } from './api'
+import type { Campaign, CreateCampaignRequest } from '@/types'
 
-export const campaignService = {
-  async getCampaigns(page = 1, limit = 10): Promise<PaginatedResponse<Campaign>> {
-    logStubCall('campaignService', 'getCampaigns')
-    return createEmptyPaginated<Campaign>({ page, limit })
-  },
-
-  async getCampaign(id: string): Promise<Campaign> {
-    logStubCall('campaignService', 'getCampaign')
-    return createMockCampaign({ id })
-  },
-
-  async createCampaign(campaignData: CreateCampaignRequest): Promise<Campaign> {
-    logStubCall('campaignService', 'createCampaign')
-    return createMockCampaign({
-      id: 'stub-campaign',
-      name: campaignData.name,
-      serviceInstanceId: campaignData.serviceInstanceId,
-      templateId: campaignData.templateId
-    })
-  },
-
-  async uploadContacts(id: string, file: File): Promise<{ totalContacts: number }> {
-    logStubCall('campaignService', 'uploadContacts')
-    return { totalContacts: 0 }
-  },
-
-  async startCampaign(id: string): Promise<Campaign> {
-    logStubCall('campaignService', 'startCampaign')
-    return createMockCampaign({ id, status: CampaignStatus.PROCESSING })
-  },
-
-  async pauseCampaign(id: string): Promise<Campaign> {
-    logStubCall('campaignService', 'pauseCampaign')
-    return createMockCampaign({ id, status: CampaignStatus.PAUSED })
-  },
-
-  async resumeCampaign(id: string): Promise<Campaign> {
-    logStubCall('campaignService', 'resumeCampaign')
-    return createMockCampaign({ id, status: CampaignStatus.PROCESSING })
-  },
-
-  async deleteCampaign(id: string): Promise<void> {
-    logStubCall('campaignService', `deleteCampaign:${id}`)
-  }
+interface UploadContactsResponse {
+  success: boolean
+  totalContacts: number
+  campaignId: string
 }
 
-const createMockCampaign = (overrides?: Partial<Campaign>): Campaign => {
-  const now = new Date().toISOString()
-  return {
-    id: 'stub-campaign-id',
-    name: 'Campanha Demo',
-    status: CampaignStatus.DRAFT,
-    serviceInstanceId: 'stub-instance',
-    delaySeconds: 0,
-    totalContacts: 0,
-    sentCount: 0,
-    failedCount: 0,
-    createdAt: now,
-    updatedAt: now,
-    serviceInstance: undefined,
-    templateId: undefined,
-    template: undefined,
-    scheduledAt: undefined,
-    startedAt: undefined,
-    completedAt: undefined,
-    ...overrides
+export const campaignService = {
+  /**
+   * GET /api/campaigns
+   * Lista todas as campanhas
+   * Retorna array direto, não paginado
+   */
+  async getCampaigns(): Promise<Campaign[]> {
+    const { data } = await api.get<Campaign[]>('/campaigns')
+    return data
+  },
+
+  /**
+   * GET /api/campaigns/:id
+   * Retorna uma campanha por ID
+   */
+  async getCampaign(id: string): Promise<Campaign> {
+    const { data } = await api.get<Campaign>(`/campaigns/${id}`)
+    return data
+  },
+
+  /**
+   * POST /api/campaigns
+   * Cria uma nova campanha
+   */
+  async createCampaign(campaignData: CreateCampaignRequest): Promise<Campaign> {
+    const { data } = await api.post<Campaign>('/campaigns', campaignData)
+    return data
+  },
+
+  /**
+   * POST /api/campaigns/:id/upload
+   * Faz upload de arquivo CSV com contatos para a campanha
+   */
+  async uploadContacts(id: string, file: File): Promise<UploadContactsResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const { data } = await api.post<UploadContactsResponse>(`/campaigns/${id}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return data
+  },
+
+  /**
+   * POST /api/campaigns/:id/start
+   * Inicia uma campanha
+   */
+  async startCampaign(id: string): Promise<Campaign> {
+    const { data } = await api.post<Campaign>(`/campaigns/${id}/start`)
+    return data
+  },
+
+  /**
+   * PATCH /api/campaigns/:id/pause
+   * Pausa uma campanha em processamento
+   */
+  async pauseCampaign(id: string): Promise<Campaign> {
+    const { data } = await api.patch<Campaign>(`/campaigns/${id}/pause`)
+    return data
+  },
+
+  /**
+   * PATCH /api/campaigns/:id/resume
+   * Retoma uma campanha pausada
+   */
+  async resumeCampaign(id: string): Promise<Campaign> {
+    const { data } = await api.patch<Campaign>(`/campaigns/${id}/resume`)
+    return data
+  },
+
+  /**
+   * DELETE /api/campaigns/:id
+   * Remove uma campanha
+   */
+  async deleteCampaign(id: string): Promise<void> {
+    await api.delete(`/campaigns/${id}`)
   }
 }
 
