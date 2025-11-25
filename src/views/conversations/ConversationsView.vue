@@ -658,7 +658,7 @@ watch(showNewMessageModal, (show) => {
 
 const sendNewMessage = async () => {
   if (!canSendNewMessage.value) return
-  
+
   sendingMessage.value = true
   try {
     // Ensure WebSocket is connected
@@ -667,34 +667,48 @@ const sendNewMessage = async () => {
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
-    // Find or create conversation
+    console.log('🔄 Criando/encontrando conversa...')
+    console.log('Contact ID:', newMessageContactId.value)
+    console.log('Instance ID:', newMessageInstanceId.value)
+
+    // Find or create conversation - melhorar lógica de busca
     let conversation = conversations.value.find(c => {
       const contactId = c.contact?.id || c.contactId
       const instanceId = c.serviceInstance?.id || c.serviceInstanceId
-      return contactId === newMessageContactId.value && instanceId === newMessageInstanceId.value
+      const match = contactId === newMessageContactId.value && instanceId === newMessageInstanceId.value
+      console.log('Verificando conversa:', c.id, 'contact:', contactId, 'instance:', instanceId, 'match:', match)
+      return match
     })
-    
+
     if (!conversation) {
+      console.log('📝 Criando nova conversa...')
       conversation = await conversationService.createConversation({
         contactId: newMessageContactId.value,
         serviceInstanceId: newMessageInstanceId.value
       })
+      console.log('✅ Conversa criada:', conversation.id)
       await loadConversations()
+    } else {
+      console.log('✅ Conversa existente encontrada:', conversation.id)
     }
 
+    console.log('📤 Enviando mensagem para conversa:', conversation.id, 'pela instância:', conversation.serviceInstanceId || conversation.serviceInstance?.id)
+
     // Enviar mensagem via HTTP API
-    await messageService.sendMessage(conversation.id, newMessageContent.value.trim())
-    
+    const sentMessage = await messageService.sendMessage(conversation.id, newMessageContent.value.trim())
+    console.log('✅ Mensagem enviada:', sentMessage.id)
+
     // Close modal and select conversation
     showNewMessageModal.value = false
     await selectConversation(conversation.id)
-    
+
     // Clear form
     newMessageInstanceId.value = ''
     newMessageContactId.value = ''
     newMessageContent.value = ''
   } catch (error: any) {
-    console.error('Erro ao enviar mensagem:', error)
+    console.error('❌ Erro ao enviar mensagem:', error)
+    console.error('Detalhes do erro:', error.response?.data)
     alert(error.response?.data?.message || 'Erro ao enviar mensagem')
   } finally {
     sendingMessage.value = false

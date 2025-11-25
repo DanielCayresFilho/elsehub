@@ -4,24 +4,20 @@ import type { Message, PaginatedResponse } from '@/types'
 interface SendMessageRequest {
   conversationId: string
   content: string
+  via: string
 }
 
 export const messageService = {
-  // ✅ Conforme documentação: POST /api/messages
+  // ✅ Conforme documentação: POST /api/messages/send
   async sendMessage(conversationId: string, content: string): Promise<Message> {
-    const payload: SendMessageRequest = { conversationId, content }
-    // Tenta primeiro /api/messages, se não funcionar tenta /api/messages/send
-    try {
-      const { data } = await api.post<Message>('/messages', payload)
-      return data
-    } catch (error: any) {
-      // Fallback para endpoint antigo
-      if (error.response?.status === 404) {
-        const { data } = await api.post<Message>('/messages/send', payload)
-        return data
-      }
-      throw error
+    const payload: SendMessageRequest = {
+      conversationId,
+      content,
+      via: 'CHAT_MANUAL'
     }
+    // Conforme documentação: usa /messages/send diretamente
+    const { data } = await api.post<Message>('/messages/send', payload)
+    return data
   },
 
   // ✅ Conforme documentação: GET /api/messages/conversation/:conversationId
