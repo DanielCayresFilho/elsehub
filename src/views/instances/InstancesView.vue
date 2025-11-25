@@ -210,7 +210,7 @@
           <div v-else-if="qrCode" class="qr-container">
             <div v-if="qrCode.base64" class="qr-image">
               <img :src="qrCode.base64" alt="QR Code" />
-              <p class="qr-hint">Escaneie no WhatsApp > Dispositivos conectados</p>
+              <p class="qr-hint">Escaneie no WhatsApp → Dispositivos conectados</p>
             </div>
             <div v-else-if="qrCode.pairingCode" class="qr-pairing">
               <h4>Código de pareamento</h4>
