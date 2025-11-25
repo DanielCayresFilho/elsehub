@@ -21,7 +21,8 @@ export enum CampaignStatus {
 }
 
 export enum ServiceProvider {
-  EVOLUTION_API = 'EVOLUTION_API'
+  EVOLUTION_API = 'EVOLUTION_API',
+  OFFICIAL_META = 'OFFICIAL_META'
 }
 
 // User Types
@@ -75,20 +76,42 @@ export interface CreateContactRequest {
 }
 
 // Service Instance Types
-export interface ServiceInstanceCredentials {
+export interface EvolutionInstanceCredentials {
   apiToken: string
   serverUrl: string
   instanceName: string
 }
 
+export interface OfficialMetaInstanceCredentials {
+  wabaId: string
+  phoneId: string
+  accessToken: string
+}
+
+export type ServiceInstanceCredentials =
+  | EvolutionInstanceCredentials
+  | OfficialMetaInstanceCredentials
+
 export interface ServiceInstance {
   id: string
   name: string
+  phone?: string
   provider: ServiceProvider
   credentials: ServiceInstanceCredentials
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface CreateServiceInstanceRequest {
+  name: string
+  phone: string
+  provider: ServiceProvider
+  credentials: ServiceInstanceCredentials
+}
+
+export interface UpdateServiceInstanceRequest extends Partial<CreateServiceInstanceRequest> {
+  isActive?: boolean
 }
 
 export interface QRCodeResponse {

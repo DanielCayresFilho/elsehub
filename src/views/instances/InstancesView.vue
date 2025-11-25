@@ -1,45 +1,132 @@
 <template>
   <div class="instances-view">
     <div class="page-header">
-      <h2>Instâncias WhatsApp</h2>
-      <button @click="showModal = true" class="btn-primary">
+      <h2>Instâncias de Atendimento</h2>
+      <button @click="openCreateModal" class="btn-primary">
         <i class="fas fa-plus"></i>
         Nova Instância
       </button>
     </div>
 
-    <div class="instances-grid">
-      <div v-for="instance in instances" :key="instance.id" class="instance-card card">
+    <div class="toolbar card">
+      <div class="filters-grid">
+        <div class="form-group inline">
+          <label>Buscar</label>
+          <input
+            type="text"
+            v-model="searchQuery"
+            placeholder="Nome ou telefone"
+          />
+        </div>
+
+        <div class="form-group inline">
+          <label>Provider</label>
+          <select v-model="providerFilter">
+            <option value="ALL">Todos</option>
+            <option v-for="option in providerOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+
+        <label class="checkbox-label inline">
+          <input type="checkbox" v-model="includeInactive" />
+          <span>Mostrar inativas</span>
+        </label>
+
+        <button class="btn-secondary refresh-btn" @click="fetchInstances" :disabled="loadingList">
+          <i class="fas fa-rotate-right"></i>
+          Atualizar
+        </button>
+      </div>
+    </div>
+
+    <div v-if="loadingList" class="loading-state card">
+      <div class="loading"></div>
+      <p>Carregando instâncias...</p>
+    </div>
+
+    <div v-else-if="filteredInstances.length === 0" class="empty-state card">
+      <i class="fas fa-server"></i>
+      <h3>Nenhuma instância encontrada</h3>
+      <p>Ajuste os filtros ou crie uma nova instância.</p>
+      <button class="btn-primary" @click="openCreateModal">
+        Criar instância
+      </button>
+    </div>
+
+    <div v-else class="instances-grid">
+      <div v-for="instance in filteredInstances" :key="instance.id" class="instance-card card">
         <div class="instance-header">
-          <h3>{{ instance.name }}</h3>
-          <span :class="['status-badge', instance.isActive ? 'active' : 'inactive']">
-            {{ instance.isActive ? 'Ativa' : 'Inativa' }}
-          </span>
+          <div>
+            <h3>{{ instance.name }}</h3>
+            <small>{{ instance.phone || 'Telefone não informado' }}</small>
+          </div>
+          <div class="badges">
+            <span class="provider-badge">
+              {{ providerLabel(instance.provider) }}
+            </span>
+            <span class="status-badge" :class="{ active: instance.isActive, inactive: !instance.isActive }">
+              {{ instance.isActive ? 'Ativa' : 'Inativa' }}
+            </span>
+          </div>
         </div>
+
         <div class="instance-info">
-          <p><strong>Provider:</strong> {{ instance.provider }}</p>
-          <p><strong>Instância:</strong> {{ instance.credentials.instanceName }}</p>
-          <p><strong>Server:</strong> {{ instance.credentials.serverUrl }}</p>
+          <p><strong>Atualizada em:</strong> {{ formatDate(instance.updatedAt) }}</p>
           <p><strong>Criada em:</strong> {{ formatDate(instance.createdAt) }}</p>
+
+          <template v-if="isEvolution(instance)">
+            <p><strong>Instância:</strong> {{ (instance.credentials as EvolutionInstanceCredentials).instanceName }}</p>
+            <p><strong>Servidor:</strong> {{ (instance.credentials as EvolutionInstanceCredentials).serverUrl }}</p>
+          </template>
+          <template v-else>
+            <p><strong>WABA ID:</strong> {{ (instance.credentials as OfficialMetaInstanceCredentials).wabaId }}</p>
+            <p><strong>Phone ID:</strong> {{ (instance.credentials as OfficialMetaInstanceCredentials).phoneId }}</p>
+          </template>
         </div>
+
         <div class="instance-actions">
-          <button @click="toggleActive(instance)" class="btn-toggle" :class="{ active: instance.isActive }" :title="instance.isActive ? 'Desativar' : 'Ativar'">
-            <i :class="instance.isActive ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
-          </button>
-          <button @click="editInstance(instance)" class="btn-secondary" title="Editar instância">
+          <button
+            class="btn-secondary btn-sm"
+            @click="openEditModal(instance)"
+            title="Editar instância"
+          >
             <i class="fas fa-edit"></i>
+            Editar
           </button>
-          <button @click="showQRCode(instance.id)" class="btn-secondary" title="Ver QR Code">
+
+          <button
+            v-if="isEvolution(instance)"
+            class="btn-secondary btn-sm"
+            @click="openQrModal(instance)"
+            title="Ver QR Code"
+          >
             <i class="fas fa-qrcode"></i>
+            QR Code
           </button>
-          <button @click="deleteInstance(instance.id)" class="btn-danger" title="Deletar instância">
+
+          <button
+            class="btn-secondary btn-sm"
+            :class="{ 'btn-disabled': savingToggleId === instance.id }"
+            @click="toggleActiveStatus(instance)"
+            :disabled="savingToggleId === instance.id"
+          >
+            <i :class="instance.isActive ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
+            {{ instance.isActive ? 'Desativar' : 'Ativar' }}
+          </button>
+
+          <button
+            class="btn-danger btn-sm"
+            @click="handleDeleteInstance(instance)"
+          >
             <i class="fas fa-trash"></i>
+            Remover
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Create/Edit Modal -->
     <div v-if="showModal" class="modal-overlay" @click="closeModal">
       <div class="modal" @click.stop>
         <div class="modal-header">
@@ -49,72 +136,90 @@
           </button>
         </div>
         <div class="modal-body">
-          <form>
+          <form @submit.prevent>
+            <div v-if="formErrors.length" class="error-list">
+              <p v-for="error in formErrors" :key="error">{{ error }}</p>
+            </div>
+
             <div class="form-group">
               <label>Nome</label>
               <input type="text" v-model="form.name" required />
             </div>
-            <div v-if="!editingInstance" class="form-group">
-              <label>API Token</label>
-              <input type="text" v-model="form.credentials.apiToken" required placeholder="xrgr4qjcxhZ3m5kn2Rc3DdN5qSnhS3cp" />
+
+            <div class="form-group">
+              <label>Telefone (E.164)</label>
+              <input type="tel" v-model="form.phone" placeholder="+5511999999999" required />
             </div>
-            <div v-if="!editingInstance" class="form-group">
-              <label>Server URL</label>
-              <input type="url" v-model="form.credentials.serverUrl" required placeholder="https://evolution.covenos.com.br" />
+
+            <div class="form-group">
+              <label>Provider</label>
+              <select v-model="form.provider">
+                <option v-for="option in providerOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
             </div>
-            <div v-if="!editingInstance" class="form-group">
-              <label>Nome da Instância</label>
-              <input type="text" v-model="form.credentials.instanceName" required />
+
+            <div class="form-divider">Credenciais</div>
+            <div v-for="field in credentialFields" :key="field.key" class="form-group">
+              <label>{{ field.label }}</label>
+              <input
+                :type="field.type || 'text'"
+                v-model="form.credentials[field.key]"
+                :placeholder="field.placeholder"
+                required
+              />
             </div>
+
             <div v-if="editingInstance" class="form-group checkbox-group">
               <label class="checkbox-label">
                 <input type="checkbox" v-model="form.isActive" />
-                <span>Instância Ativa</span>
+                <span>Instância ativa</span>
               </label>
             </div>
           </form>
         </div>
         <div class="modal-footer">
           <button @click="closeModal" class="btn-secondary">Cancelar</button>
-          <button @click="editingInstance ? updateInstance() : createInstance()" class="btn-primary">
-            {{ editingInstance ? 'Salvar' : 'Criar' }}
+          <button class="btn-primary" @click="submitForm" :disabled="saving">
+            <span v-if="!saving">{{ editingInstance ? 'Salvar alterações' : 'Criar instância' }}</span>
+            <span v-else>Salvando...</span>
           </button>
         </div>
       </div>
     </div>
 
-    <!-- QR Code Modal -->
-    <div v-if="showQRModal" class="modal-overlay" @click="showQRModal = false">
-      <div class="modal" @click.stop>
+    <div v-if="showQRModal" class="modal-overlay" @click="closeQrModal">
+      <div class="modal qr-modal" @click.stop>
         <div class="modal-header">
-          <h3>QR Code</h3>
-          <button @click="showQRModal = false" class="icon-btn">
+          <h3>QR Code - {{ qrModalInstance?.name }}</h3>
+          <button @click="closeQrModal" class="icon-btn">
             <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="modal-body qr-modal-body">
-          <div v-if="loadingQR" class="loading"></div>
+          <div v-if="qrLoading" class="loading"></div>
+
+          <div v-else-if="qrError" class="qr-error-block">
+            <p>{{ qrError }}</p>
+            <button class="btn-secondary btn-sm" @click="retryQrCode">
+              Tentar novamente
+            </button>
+          </div>
+
           <div v-else-if="qrCode" class="qr-container">
-            <!-- QR Code em base64 -->
             <div v-if="qrCode.base64" class="qr-image">
               <img :src="qrCode.base64" alt="QR Code" />
-              <p class="qr-hint">Escaneie o QR Code com o WhatsApp</p>
+              <p class="qr-hint">Escaneie no WhatsApp > Dispositivos conectados</p>
             </div>
-            <!-- Código de pareamento -->
             <div v-else-if="qrCode.pairingCode" class="qr-pairing">
-              <h4>Código de Pareamento</h4>
+              <h4>Código de pareamento</h4>
               <div class="pairing-code">{{ qrCode.pairingCode }}</div>
-              <p class="qr-hint">Use este código para conectar a instância</p>
+              <p class="qr-hint">Digite no aplicativo Evolution</p>
             </div>
-            <!-- Já conectada -->
             <div v-else-if="qrCode.message" class="qr-connected">
               <i class="fas fa-check-circle"></i>
               <p>{{ qrCode.message }}</p>
-            </div>
-            <!-- Erro ou formato desconhecido -->
-            <div v-else class="qr-error">
-              <i class="fas fa-exclamation-triangle"></i>
-              <p>Formato de resposta inesperado</p>
             </div>
           </div>
         </div>
@@ -124,138 +229,274 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ServiceProvider } from '@/types'
-import type { ServiceInstance, QRCodeResponse } from '@/types'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { ServiceProvider, type EvolutionInstanceCredentials, type OfficialMetaInstanceCredentials } from '@/types'
+import type { ServiceInstance, QRCodeResponse, ServiceInstanceCredentials } from '@/types'
+import { serviceInstanceService } from '@/services/service-instance.service'
 
-const instances = ref<ServiceInstance[]>([])
-const showModal = ref(false)
-const showQRModal = ref(false)
-const loadingQR = ref(false)
-const qrCode = ref<QRCodeResponse | null>(null)
-const editingInstance = ref<ServiceInstance | null>(null)
+type ProviderFilter = 'ALL' | ServiceProvider
+type CredentialField = {
+  key: string
+  label: string
+  type?: string
+  placeholder?: string
+}
 
-const form = ref({
-  name: '',
-  provider: ServiceProvider.EVOLUTION_API,
-  credentials: {
-    apiToken: '',
-    serverUrl: '',
-    instanceName: ''
-  },
-  isActive: true
-})
+const providerOptions = [
+  { value: ServiceProvider.EVOLUTION_API, label: 'Evolution API' },
+  { value: ServiceProvider.OFFICIAL_META, label: 'Meta Oficial' }
+]
 
-const loadInstances = () => {
-  instances.value = [
-    {
-      id: 'instance-demo',
-      name: 'Instância Demo',
-      provider: ServiceProvider.EVOLUTION_API,
-      credentials: {
-        apiToken: 'demo-token',
-        serverUrl: 'https://demo.example.com',
-        instanceName: 'demo'
-      },
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+const credentialFieldMap: Record<ServiceProvider, CredentialField[]> = {
+  [ServiceProvider.EVOLUTION_API]: [
+    { key: 'instanceName', label: 'Nome da Instância', placeholder: 'financeiro-01' },
+    { key: 'apiToken', label: 'API Token', placeholder: 'xrgr4qjcxhZ...' },
+    { key: 'serverUrl', label: 'Server URL', placeholder: 'https://evolution.suaempresa.com', type: 'url' }
+  ],
+  [ServiceProvider.OFFICIAL_META]: [
+    { key: 'wabaId', label: 'WABA ID', placeholder: '123456789' },
+    { key: 'phoneId', label: 'Phone ID', placeholder: '987654321' },
+    { key: 'accessToken', label: 'Access Token', placeholder: 'EAA...' }
   ]
 }
 
-const createInstance = () => {
-  if (!form.value.name.trim()) {
-    alert('Nome é obrigatório')
-    return
+const defaultCredentials = (provider: ServiceProvider): Record<string, string> => {
+  if (provider === ServiceProvider.EVOLUTION_API) {
+    return {
+      instanceName: '',
+      apiToken: '',
+      serverUrl: ''
+    }
   }
+  return {
+    wabaId: '',
+    phoneId: '',
+    accessToken: ''
+  }
+}
 
-  instances.value.unshift({
-    id: `instance-${Date.now()}`,
-    name: form.value.name.trim(),
-    provider: form.value.provider,
-    credentials: {
-      apiToken: form.value.credentials.apiToken.trim() || 'demo-token',
-      serverUrl: form.value.credentials.serverUrl.trim() || 'https://demo.example.com',
-      instanceName: form.value.credentials.instanceName.trim() || 'demo'
-    },
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+const isEvolution = (instanceOrProvider: ServiceInstance | ServiceProvider): boolean => {
+  const provider = typeof instanceOrProvider === 'string' ? instanceOrProvider : instanceOrProvider.provider
+  return provider === ServiceProvider.EVOLUTION_API
+}
+
+const providerLabel = (provider: ServiceProvider) => {
+  return providerOptions.find(option => option.value === provider)?.label ?? provider
+}
+
+const instances = ref<ServiceInstance[]>([])
+const loadingList = ref(false)
+const includeInactive = ref(false)
+const providerFilter = ref<ProviderFilter>('ALL')
+const searchQuery = ref('')
+
+const showModal = ref(false)
+const editingInstance = ref<ServiceInstance | null>(null)
+const formErrors = ref<string[]>([])
+const saving = ref(false)
+const savingToggleId = ref<string | null>(null)
+
+const suspendCredentialReset = ref(false)
+const form = ref({
+  name: '',
+  phone: '+55',
+  provider: ServiceProvider.EVOLUTION_API,
+  credentials: defaultCredentials(ServiceProvider.EVOLUTION_API),
+  isActive: true
+})
+
+const credentialFields = computed(() => credentialFieldMap[form.value.provider])
+
+watch(
+  () => form.value.provider,
+  (provider) => {
+    if (suspendCredentialReset.value) {
+      suspendCredentialReset.value = false
+      return
+    }
+    form.value.credentials = defaultCredentials(provider)
+  }
+)
+
+const filteredInstances = computed(() => {
+  return instances.value.filter(instance => {
+    if (!includeInactive.value && !instance.isActive) return false
+    if (providerFilter.value !== 'ALL' && instance.provider !== providerFilter.value) return false
+    if (searchQuery.value.trim()) {
+      const term = searchQuery.value.trim().toLowerCase()
+      const haystack = `${instance.name} ${instance.phone ?? ''}`.toLowerCase()
+      return haystack.includes(term)
+    }
+    return true
   })
-  closeModal()
-}
+})
 
-const showQRCode = (id: string) => {
-  showQRModal.value = true
-  loadingQR.value = false
-  qrCode.value = {
-    pairingCode: id.slice(-6).padStart(6, '0')
+const fetchInstances = async () => {
+  loadingList.value = true
+  try {
+    instances.value = await serviceInstanceService.getInstances({ includeInactive: includeInactive.value })
+  } catch (error: any) {
+    alert(error.response?.data?.message || 'Erro ao carregar instâncias')
+  } finally {
+    loadingList.value = false
   }
 }
 
-const editInstance = (instance: ServiceInstance) => {
+watch(includeInactive, () => {
+  fetchInstances()
+})
+
+const resetForm = () => {
+  editingInstance.value = null
+  formErrors.value = []
+  suspendCredentialReset.value = true
+  form.value = {
+    name: '',
+    phone: '+55',
+    provider: ServiceProvider.EVOLUTION_API,
+    credentials: defaultCredentials(ServiceProvider.EVOLUTION_API),
+    isActive: true
+  }
+}
+
+const openCreateModal = () => {
+  resetForm()
+  showModal.value = true
+}
+
+const extractCredentials = (instance: ServiceInstance): Record<string, string> => {
+  const credentials = instance.credentials as ServiceInstanceCredentials
+  if (isEvolution(instance)) {
+    const evo = credentials as EvolutionInstanceCredentials
+    return {
+      instanceName: evo.instanceName ?? '',
+      apiToken: evo.apiToken ?? '',
+      serverUrl: evo.serverUrl ?? ''
+    }
+  }
+  const meta = credentials as OfficialMetaInstanceCredentials
+  return {
+    wabaId: meta.wabaId ?? '',
+    phoneId: meta.phoneId ?? '',
+    accessToken: meta.accessToken ?? ''
+  }
+}
+
+const openEditModal = (instance: ServiceInstance) => {
   editingInstance.value = instance
+  formErrors.value = []
+  suspendCredentialReset.value = true
   form.value = {
     name: instance.name,
+    phone: instance.phone ?? '',
     provider: instance.provider,
-    credentials: {
-      apiToken: instance.credentials.apiToken,
-      serverUrl: instance.credentials.serverUrl,
-      instanceName: instance.credentials.instanceName
-    },
+    credentials: extractCredentials(instance),
     isActive: instance.isActive
   }
   showModal.value = true
 }
 
-const updateInstance = () => {
-  if (!editingInstance.value) return
+const validateForm = (): string[] => {
+  const errors: string[] = []
   if (!form.value.name.trim()) {
-    alert('Nome é obrigatório')
+    errors.push('Informe o nome da instância.')
+  }
+  const phone = form.value.phone.trim()
+  if (!phone) {
+    errors.push('Informe o telefone no formato E.164.')
+  } else if (!/^\+?[1-9]\d{7,14}$/.test(phone)) {
+    errors.push('Telefone inválido. Use o formato +5511999999999.')
+  }
+
+  credentialFields.value.forEach(field => {
+    const value = (form.value.credentials[field.key] || '').trim()
+    if (!value) {
+      errors.push(`Informe ${field.label}.`)
+    }
+    if (field.key === 'serverUrl' && value && !value.startsWith('https://')) {
+      errors.push('Server URL deve começar com https://')
+    }
+  })
+
+  return errors
+}
+
+const buildPayload = () => {
+  const credentials = { ...form.value.credentials }
+  if (form.value.provider === ServiceProvider.EVOLUTION_API && credentials.serverUrl) {
+    credentials.serverUrl = credentials.serverUrl.replace(/\/+$/, '')
+  }
+
+  return {
+    name: form.value.name.trim(),
+    phone: form.value.phone.trim(),
+    provider: form.value.provider,
+    credentials
+  }
+}
+
+const submitForm = async () => {
+  formErrors.value = validateForm()
+  if (formErrors.value.length > 0) {
     return
   }
 
-  instances.value = instances.value.map(instance =>
-    instance.id === editingInstance.value?.id
-      ? {
-          ...instance,
-          name: form.value.name.trim(),
-          isActive: form.value.isActive,
-          updatedAt: new Date().toISOString()
-        }
-      : instance
-  )
-  closeModal()
-}
+  const payload = buildPayload()
+  saving.value = true
 
-const toggleActive = (instance: ServiceInstance) => {
-  instances.value = instances.value.map(item =>
-    item.id === instance.id ? { ...item, isActive: !item.isActive } : item
-  )
+  try {
+    if (editingInstance.value) {
+      await serviceInstanceService.updateInstance(editingInstance.value.id, {
+        ...payload,
+        isActive: form.value.isActive
+      })
+    } else {
+      await serviceInstanceService.createInstance(payload)
+    }
+    await fetchInstances()
+    closeModal()
+  } catch (error: any) {
+    const apiMessage = error.response?.data?.message
+    formErrors.value = [
+      Array.isArray(apiMessage) ? apiMessage.join(', ') : apiMessage || 'Erro ao salvar instância'
+    ]
+  } finally {
+    saving.value = false
+  }
 }
 
 const closeModal = () => {
   showModal.value = false
-  editingInstance.value = null
-  form.value = {
-    name: '',
-    provider: ServiceProvider.EVOLUTION_API,
-    credentials: { apiToken: '', serverUrl: '', instanceName: '' },
-    isActive: true
+  resetForm()
+}
+
+const toggleActiveStatus = async (instance: ServiceInstance) => {
+  savingToggleId.value = instance.id
+  try {
+    await serviceInstanceService.updateInstance(instance.id, {
+      isActive: !instance.isActive
+    })
+    await fetchInstances()
+  } catch (error: any) {
+    alert(error.response?.data?.message || 'Erro ao atualizar status da instância')
+  } finally {
+    savingToggleId.value = null
   }
 }
 
-const deleteInstance = (id: string) => {
-  if (!confirm('Tem certeza que deseja deletar esta instância?')) {
-    return
+const handleDeleteInstance = async (instance: ServiceInstance) => {
+  const confirmed = confirm('Tem certeza que deseja desativar esta instância?')
+  if (!confirmed) return
+  try {
+    await serviceInstanceService.deleteInstance(instance.id)
+    await fetchInstances()
+  } catch (error: any) {
+    alert(error.response?.data?.message || 'Erro ao remover instância')
   }
-  instances.value = instances.value.filter(instance => instance.id !== id)
 }
 
 const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('pt-BR', {
+  return new Date(dateString).toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -264,8 +505,71 @@ const formatDate = (dateString: string) => {
   })
 }
 
+const showQRModal = ref(false)
+const qrModalInstance = ref<ServiceInstance | null>(null)
+const qrLoading = ref(false)
+const qrError = ref('')
+const qrCode = ref<QRCodeResponse | null>(null)
+let qrInterval: number | null = null
+
+const fetchQrCode = async (instanceId: string, silent = false) => {
+  if (!silent) {
+    qrLoading.value = true
+    qrError.value = ''
+  }
+  try {
+    const response = await serviceInstanceService.getQRCode(instanceId)
+    qrCode.value = response
+    if (response.message && response.message.toLowerCase().includes('conectada')) {
+      stopQrPolling()
+    }
+  } catch (error: any) {
+    qrError.value = error.response?.data?.message || 'Não foi possível recuperar o QR Code.'
+  } finally {
+    qrLoading.value = false
+  }
+}
+
+const startQrPolling = (instanceId: string) => {
+  stopQrPolling()
+  qrInterval = window.setInterval(() => {
+    fetchQrCode(instanceId, true)
+  }, 7000)
+}
+
+const stopQrPolling = () => {
+  if (qrInterval) {
+    clearInterval(qrInterval)
+    qrInterval = null
+  }
+}
+
+const openQrModal = (instance: ServiceInstance) => {
+  qrModalInstance.value = instance
+  showQRModal.value = true
+  fetchQrCode(instance.id)
+  startQrPolling(instance.id)
+}
+
+const closeQrModal = () => {
+  showQRModal.value = false
+  qrModalInstance.value = null
+  qrCode.value = null
+  qrError.value = ''
+  stopQrPolling()
+}
+
+const retryQrCode = () => {
+  if (!qrModalInstance.value) return
+  fetchQrCode(qrModalInstance.value.id)
+}
+
+onUnmounted(() => {
+  stopQrPolling()
+})
+
 onMounted(() => {
-  loadInstances()
+  fetchInstances()
 })
 </script>
 
@@ -291,9 +595,56 @@ onMounted(() => {
   }
 }
 
+.toolbar {
+  margin-bottom: $spacing-xl;
+  padding: $spacing-lg;
+}
+
+.filters-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  align-items: flex-end;
+
+  .form-group.inline {
+    flex: 1;
+
+    input,
+    select {
+      width: 100%;
+    }
+  }
+
+  .checkbox-label.inline {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    cursor: pointer;
+    color: $text-primary-light;
+
+    .dark & {
+      color: $text-primary-dark;
+    }
+  }
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.loading-state {
+  @include flex-center;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-xl;
+  margin-bottom: $spacing-xl;
+}
+
 .instances-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: $spacing-lg;
 }
 
@@ -302,29 +653,50 @@ onMounted(() => {
 
   .instance-header {
     @include flex-between;
+    gap: $spacing-md;
     margin-bottom: $spacing-md;
 
     h3 {
-      color: $text-primary-light;
+      margin-bottom: $spacing-xs;
+    }
+
+    small {
+      color: $text-secondary-light;
 
       .dark & {
-        color: $text-primary-dark;
+        color: $text-secondary-dark;
       }
     }
 
+    .badges {
+      display: flex;
+      flex-direction: column;
+      gap: $spacing-xs;
+      align-items: flex-end;
+    }
+
+    .provider-badge {
+      padding: $spacing-xxs $spacing-sm;
+      border-radius: $radius-full;
+      background: rgba($primary-light, 0.1);
+      color: $primary-light;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
     .status-badge {
-      padding: $spacing-xs $spacing-sm;
+      padding: $spacing-xxs $spacing-sm;
       border-radius: $radius-full;
       font-size: 0.75rem;
-      font-weight: 500;
+      font-weight: 600;
 
       &.active {
-        background: rgba($success, 0.1);
+        background: rgba($success, 0.12);
         color: $success;
       }
 
       &.inactive {
-        background: rgba($error, 0.1);
+        background: rgba($error, 0.12);
         color: $error;
       }
     }
@@ -336,11 +708,6 @@ onMounted(() => {
     p {
       font-size: 0.875rem;
       margin-bottom: $spacing-xs;
-      color: $text-secondary-light;
-
-      .dark & {
-        color: $text-secondary-dark;
-      }
 
       strong {
         color: $text-primary-light;
@@ -354,131 +721,106 @@ onMounted(() => {
 
   .instance-actions {
     display: flex;
-    gap: $spacing-sm;
-    margin-top: $spacing-md;
     flex-wrap: wrap;
+    gap: $spacing-sm;
 
     button {
-      padding: $spacing-sm $spacing-md;
-      font-size: 0.875rem;
-    }
-
-    .btn-toggle {
-      background: rgba($secondary-light, 0.1);
-      color: $secondary-light;
-      border: 1px solid rgba($secondary-light, 0.3);
-
-      &.active {
-        background: rgba($success, 0.1);
-        color: $success;
-        border-color: rgba($success, 0.3);
-      }
-
-      &:hover {
-        background: rgba($secondary-light, 0.2);
-      }
-
-      &.active:hover {
-        background: rgba($success, 0.2);
-      }
-    }
-
-    .btn-danger {
-      background: rgba($error, 0.1);
-      color: $error;
-      border: 1px solid rgba($error, 0.3);
-
-      &:hover {
-        background: rgba($error, 0.2);
-      }
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
     }
   }
 }
 
-.qr-modal-body {
+.btn-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.empty-state {
   @include flex-center;
-  min-height: 300px;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-2xl;
+  text-align: center;
+  margin-bottom: $spacing-xl;
+
+  i {
+    font-size: 3rem;
+    color: $text-secondary-light;
+  }
+}
+
+.modal-body .error-list {
+  background: rgba($error, 0.08);
+  border: 1px solid rgba($error, 0.3);
+  color: $error;
+  padding: $spacing-md;
+  border-radius: $radius-md;
+  margin-bottom: $spacing-md;
+
+  p + p {
+    margin-top: $spacing-xs;
+  }
+}
+
+.form-divider {
+  font-weight: 600;
+  margin: $spacing-lg 0 $spacing-sm;
+}
+
+.qr-modal-body {
+  min-height: 320px;
+  @include flex-center;
 
   .qr-container {
     text-align: center;
     width: 100%;
+  }
 
-    .qr-image {
-      img {
-        max-width: 300px;
-        width: 100%;
-        border-radius: $radius-md;
-      }
+  .qr-image img {
+    max-width: 320px;
+    width: 100%;
+    border-radius: $radius-md;
+  }
 
-      .qr-hint {
-        margin-top: $spacing-md;
-        color: $text-secondary-light;
-        font-size: 0.875rem;
+  .qr-hint {
+    margin-top: $spacing-md;
+    font-size: 0.85rem;
+    color: $text-secondary-light;
 
-        .dark & {
-          color: $text-secondary-dark;
-        }
-      }
+    .dark & {
+      color: $text-secondary-dark;
     }
+  }
 
-    .qr-pairing {
-      h4 {
-        color: $text-primary-light;
-        margin-bottom: $spacing-md;
+  .pairing-code {
+    font-size: 2rem;
+    font-family: $font-family-mono;
+    background: rgba($primary-light, 0.1);
+    color: $primary-light;
+    padding: $spacing-md;
+    border-radius: $radius-md;
+    margin: $spacing-md 0;
+    letter-spacing: 0.5rem;
+  }
 
-        .dark & {
-          color: $text-primary-dark;
-        }
-      }
+  .qr-connected {
+    color: $success;
 
-      .pairing-code {
-        font-size: 2rem;
-        font-weight: bold;
-        font-family: $font-family-mono;
-        color: $primary-light;
-        background: rgba($primary-light, 0.1);
-        padding: $spacing-lg;
-        border-radius: $radius-md;
-        margin: $spacing-md 0;
-        letter-spacing: 0.5rem;
-      }
-
-      .qr-hint {
-        color: $text-secondary-light;
-        font-size: 0.875rem;
-
-        .dark & {
-          color: $text-secondary-dark;
-        }
-      }
+    i {
+      font-size: 3rem;
+      margin-bottom: $spacing-md;
     }
+  }
+}
 
-    .qr-connected {
-      i {
-        font-size: 4rem;
-        color: $success;
-        margin-bottom: $spacing-md;
-      }
+.qr-error-block {
+  text-align: center;
 
-      p {
-        font-size: 1.125rem;
-        color: $success;
-        font-weight: 500;
-      }
-    }
-
-    .qr-error {
-      i {
-        font-size: 3rem;
-        color: $warning;
-        margin-bottom: $spacing-md;
-      }
-
-      p {
-        font-size: 1rem;
-        color: $warning;
-      }
-    }
+  p {
+    margin-bottom: $spacing-md;
+    color: $error;
   }
 }
 
@@ -489,37 +831,17 @@ onMounted(() => {
   cursor: pointer;
   padding: $spacing-xs;
 
-  .dark & {
-    color: $text-secondary-dark;
-  }
-
   &:hover {
     color: $primary-light;
   }
 }
 
-.checkbox-group {
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-    cursor: pointer;
-
-    input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-    }
-
-    span {
-      color: $text-primary-light;
-      user-select: none;
-
-      .dark & {
-        color: $text-primary-dark;
-      }
-    }
-  }
+.checkbox-group .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  cursor: pointer;
 }
+</style>
 </style>
 
