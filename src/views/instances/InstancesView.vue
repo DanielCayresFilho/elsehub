@@ -708,7 +708,7 @@ onMounted(() => {
     }
 
     .provider-badge {
-      padding: $spacing-xxs $spacing-sm;
+      padding: $spacing-xs $spacing-sm;
       border-radius: $radius-full;
       background: rgba($primary-light, 0.1);
       color: $primary-light;
@@ -717,7 +717,7 @@ onMounted(() => {
     }
 
     .status-badge {
-      padding: $spacing-xxs $spacing-sm;
+      padding: $spacing-xs $spacing-sm;
       border-radius: $radius-full;
       font-size: 0.75rem;
       font-weight: 600;
