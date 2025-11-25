@@ -42,10 +42,32 @@
           </div>
           <div class="conversation-info">
             <div class="conversation-header">
-              <h4>{{ conversation.contactName || conversation.contact?.name || 'Sem nome' }}</h4>
+              <div class="conversation-title">
+                <h4>{{ conversation.contactName || conversation.contact?.name || 'Sem nome' }}</h4>
+                <div class="conversation-meta">
+                  <span 
+                    v-if="getConversationPhone(conversation)" 
+                    class="conversation-phone">
+                    <i class="fas fa-phone"></i>
+                    {{ getConversationPhone(conversation) }}
+                  </span>
+                  <span class="conversation-instance">
+                    <i class="fas fa-plug"></i>
+                    {{ getConversationInstanceLabel(conversation) }}
+                  </span>
+                </div>
+              </div>
               <span class="conversation-time">{{ formatDate(conversation.lastMessageAt || conversation.updatedAt) }}</span>
             </div>
-            <p class="conversation-preview">{{ getConversationPreview(conversation) }}</p>
+            <div class="conversation-preview">
+              <span 
+                v-if="getConversationDirectionLabel(conversation)" 
+                class="preview-direction" 
+                :class="getConversationDirectionClass(conversation)">
+                {{ getConversationDirectionLabel(conversation) }}
+              </span>
+              <span class="preview-text">{{ getConversationPreview(conversation) }}</span>
+            </div>
           </div>
           <span v-if="conversation.unreadCount" class="unread-badge">{{ conversation.unreadCount }}</span>
         </div>
@@ -646,10 +668,11 @@ const sendNewMessage = async () => {
     }
 
     // Find or create conversation
-    let conversation = conversations.value.find(
-      c => c.contact?.id === newMessageContactId.value && 
-           c.serviceInstance?.id === newMessageInstanceId.value
-    )
+    let conversation = conversations.value.find(c => {
+      const contactId = c.contact?.id || c.contactId
+      const instanceId = c.serviceInstance?.id || c.serviceInstanceId
+      return contactId === newMessageContactId.value && instanceId === newMessageInstanceId.value
+    })
     
     if (!conversation) {
       conversation = await conversationService.createConversation({
@@ -754,13 +777,41 @@ const formatPhone = (phone?: string) => {
 }
 
 const getConversationPreview = (conversation: Conversation) => {
-  if (conversation.lastMessagePreview) return conversation.lastMessagePreview
+  const preview = conversation.lastMessagePreview || conversation.lastCustomerMessagePreview
+  if (preview) return preview
   if (activeConversation.value?.id === conversation.id && messages.value.length > 0) {
     return getMessagePreviewLabel(messages.value[messages.value.length - 1])
   }
   const phone = conversation.contactPhone || conversation.contact?.phone
   if (phone) return formatPhone(phone)
   return 'Sem mensagens ainda'
+}
+
+const getConversationPhone = (conversation: Conversation) => {
+  const phone = conversation.contactPhone || conversation.contact?.phone
+  return phone ? formatPhone(phone) : ''
+}
+
+const getConversationInstanceLabel = (conversation: Conversation) => {
+  if (conversation.serviceInstanceName) return conversation.serviceInstanceName
+  if (conversation.serviceInstance?.name) return conversation.serviceInstance.name
+  if (conversation.serviceInstanceId) {
+    const suffix = conversation.serviceInstanceId.slice(-4)
+    return `Instância ${suffix}`
+  }
+  return 'Instância desconhecida'
+}
+
+const getConversationDirectionLabel = (conversation: Conversation) => {
+  if (conversation.lastMessageDirection === 'INBOUND') return 'Cliente'
+  if (conversation.lastMessageDirection === 'OUTBOUND') return 'Equipe'
+  return ''
+}
+
+const getConversationDirectionClass = (conversation: Conversation) => {
+  if (conversation.lastMessageDirection === 'INBOUND') return 'direction-inbound'
+  if (conversation.lastMessageDirection === 'OUTBOUND') return 'direction-outbound'
+  return ''
 }
 
 const hasMediaSource = (message: Message) => !!(mediaUrls.value[message.id] || message.mediaPublicUrl)
@@ -1167,7 +1218,14 @@ onUnmounted(() => {
 
 .conversation-header {
   @include flex-between;
+  align-items: flex-start;
   margin-bottom: $spacing-xs;
+
+  .conversation-title {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-xs / 2;
+  }
 
   h4 {
     font-size: 0.875rem;
@@ -1186,16 +1244,68 @@ onUnmounted(() => {
   }
 }
 
-.conversation-preview {
-  font-size: 0.8rem;
+.conversation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-xs;
+  font-size: 0.75rem;
   color: $text-secondary-light;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 
   .dark & {
     color: $text-secondary-dark;
   }
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-xs / 2;
+    line-height: 1.2;
+  }
+
+  i {
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+}
+
+.conversation-preview {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: 0.8rem;
+  color: $text-secondary-light;
+
+  .dark & {
+    color: $text-secondary-dark;
+  }
+}
+
+.preview-direction {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.45rem;
+  border-radius: $radius-full;
+  flex-shrink: 0;
+
+  &.direction-inbound {
+    background: rgba($success, 0.15);
+    color: $success;
+  }
+
+  &.direction-outbound {
+    background: rgba($primary-light, 0.15);
+    color: $primary-light;
+  }
+}
+
+.preview-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .unread-badge {

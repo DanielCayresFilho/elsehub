@@ -36,27 +36,130 @@ export function getMessagePreviewLabel(message?: Message | null): string {
   return 'Mensagem recebida'
 }
 
+function resolveMessageDirection(message: Message): 'INBOUND' | 'OUTBOUND' {
+  if (message.direction === 'INBOUND' || message.direction === 'OUTBOUND') {
+    return message.direction
+  }
+  if (message.fromMe === true) {
+    return 'OUTBOUND'
+  }
+  if (message.fromMe === false) {
+    return 'INBOUND'
+  }
+  return 'INBOUND'
+}
+
+function getLastMessage(conversation: Conversation): Message | undefined {
+  if (!conversation.messages || conversation.messages.length === 0) return undefined
+  return conversation.messages[conversation.messages.length - 1]
+}
+
+function enrichConversation(conversation: Conversation): Conversation {
+  const lastMessage = getLastMessage(conversation)
+  const previewFromMessage = lastMessage ? getMessagePreviewLabel(lastMessage) : ''
+  const fallbackPreview = conversation.lastMessagePreview || ''
+  const resolvedPreview = previewFromMessage || fallbackPreview
+  const lastDirection = lastMessage ? resolveMessageDirection(lastMessage) : conversation.lastMessageDirection
+  const lastTimestamp = lastMessage?.timestamp || lastMessage?.createdAt || conversation.lastMessageAt || conversation.updatedAt
+  const customerPreview = conversation.lastCustomerMessagePreview ??
+    (lastDirection === 'INBOUND' ? (previewFromMessage || fallbackPreview || null) : null)
+
+  return {
+    ...conversation,
+    lastMessagePreview: resolvedPreview,
+    lastMessageAt: lastTimestamp,
+    lastMessageDirection: lastDirection,
+    lastCustomerMessagePreview: customerPreview
+  }
+}
+
 export const useConversationStore = defineStore('conversation', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversation = ref<Conversation | null>(null)
   const messages = ref<Message[]>([])
   const loading = ref(false)
+  const pendingConversationFetches = new Map<string, Promise<Conversation | null>>()
+  
+  function sortConversations() {
+    conversations.value.sort((a, b) => {
+      const dateA = new Date(a.lastMessageAt || a.updatedAt || a.createdAt).getTime()
+      const dateB = new Date(b.lastMessageAt || b.updatedAt || b.createdAt).getTime()
+      return dateB - dateA
+    })
+  }
+  
+  function clearUnread(conversationId: string) {
+    const index = conversations.value.findIndex(c => c.id === conversationId)
+    if (index !== -1) {
+      conversations.value[index].unreadCount = 0
+    }
+    if (activeConversation.value?.id === conversationId) {
+      activeConversation.value.unreadCount = 0
+    }
+  }
+  
+  async function ensureConversationLoaded(conversationId: string) {
+    const existing = conversations.value.find(c => c.id === conversationId)
+    if (existing) return existing
+    
+    if (pendingConversationFetches.has(conversationId)) {
+      return pendingConversationFetches.get(conversationId)!
+    }
+    
+    const fetchPromise = conversationService.getConversation(conversationId)
+      .then(conv => {
+        if (conv) {
+          addConversation(conv)
+          return conversations.value.find(c => c.id === conversationId) ?? conv
+        }
+        return null
+      })
+      .catch(error => {
+        console.error('Erro ao buscar conversa em tempo real:', error)
+        return null
+      })
+      .finally(() => {
+        pendingConversationFetches.delete(conversationId)
+      })
+    
+    pendingConversationFetches.set(conversationId, fetchPromise)
+    return fetchPromise
+  }
   
   function updateConversationMetadata(conversationId: string, message?: Message) {
     if (!message) return
     const preview = getMessagePreviewLabel(message)
     const timestamp = message.timestamp || message.createdAt
+    const direction = resolveMessageDirection(message)
+    const isActive = activeConversation.value?.id === conversationId
+    
+    const applyUpdates = (conversation: Conversation | null) => {
+      if (!conversation) return
+      conversation.lastMessageAt = timestamp
+      conversation.lastMessagePreview = preview
+      conversation.lastMessageDirection = direction
+      if (direction === 'INBOUND') {
+        conversation.lastCustomerMessagePreview = preview
+        if (isActive) {
+          conversation.unreadCount = 0
+        } else {
+          conversation.unreadCount = (conversation.unreadCount || 0) + 1
+        }
+      } else if (isActive) {
+        conversation.unreadCount = 0
+      }
+    }
     
     const index = conversations.value.findIndex(c => c.id === conversationId)
     if (index !== -1) {
-      conversations.value[index].lastMessageAt = timestamp
-      conversations.value[index].lastMessagePreview = preview
+      applyUpdates(conversations.value[index])
     }
     
-    if (activeConversation.value?.id === conversationId) {
-      activeConversation.value.lastMessageAt = timestamp
-      activeConversation.value.lastMessagePreview = preview
+    if (isActive) {
+      applyUpdates(activeConversation.value)
     }
+    
+    sortConversations()
   }
   
   // Função para atualizar mensagens diretamente (usado pelo polling)
@@ -72,6 +175,7 @@ export const useConversationStore = defineStore('conversation', () => {
     const lastMessage = messages.value[messages.value.length - 1]
     if (lastMessage) {
       updateConversationMetadata(lastMessage.conversationId, lastMessage)
+      clearUnread(lastMessage.conversationId)
     }
   }
 
@@ -79,7 +183,8 @@ export const useConversationStore = defineStore('conversation', () => {
     loading.value = true
     try {
       const response = await conversationService.getConversations(1, 50)
-      conversations.value = response.data
+      conversations.value = response.data.map(enrichConversation)
+      sortConversations()
     } catch (error) {
       console.error('Erro ao carregar conversas:', error)
     } finally {
@@ -95,8 +200,16 @@ export const useConversationStore = defineStore('conversation', () => {
       const isSameConversation = activeConversation.value?.id === conversationId
       const existingMessages = isSameConversation ? [...messages.value] : []
       
-      const conversation = await conversationService.getConversation(conversationId)
+      const conversation = enrichConversation(await conversationService.getConversation(conversationId))
       activeConversation.value = conversation
+      
+      const existingIndex = conversations.value.findIndex(c => c.id === conversationId)
+      if (existingIndex !== -1) {
+        conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...conversation }
+      } else {
+        addConversation(conversation)
+      }
+      clearUnread(conversationId)
       
       console.log('Conversa carregada:', conversation)
       console.log('Mensagens no objeto:', conversation.messages?.length || 0)
@@ -227,10 +340,14 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function addConversation(conversation: Conversation) {
-    const exists = conversations.value.find(c => c.id === conversation.id)
-    if (!exists) {
-      conversations.value.unshift(conversation)
+    const normalized = enrichConversation(conversation)
+    const index = conversations.value.findIndex(c => c.id === normalized.id)
+    if (index !== -1) {
+      conversations.value[index] = { ...conversations.value[index], ...normalized }
+    } else {
+      conversations.value.unshift(normalized)
     }
+    sortConversations()
   }
 
   async function closeConversation(conversationId: string, tabulationId: string) {
@@ -251,7 +368,7 @@ export const useConversationStore = defineStore('conversation', () => {
     console.log('Configurando listeners do WebSocket...')
     
     // Escuta evento message:new conforme documentação
-    wsService.on('message:new', (message: Message) => {
+    wsService.on('message:new', async (message: Message) => {
       console.log('🔔 Nova mensagem recebida via WebSocket:', message)
       console.log('🔔 Detalhes:', {
         id: message.id,
@@ -264,26 +381,32 @@ export const useConversationStore = defineStore('conversation', () => {
       console.log('Conversa ativa:', activeConversation.value?.id)
       console.log('Conversa da mensagem:', message.conversationId)
       console.log('É da conversa ativa?', activeConversation.value?.id === message.conversationId)
+      await ensureConversationLoaded(message.conversationId)
       addMessage(message)
     })
 
     wsService.on('conversation:updated', (conversation: Conversation) => {
       console.log('Conversa atualizada via WebSocket:', conversation)
-      // Atualiza conversa na lista se existir
-      const index = conversations.value.findIndex(c => c.id === conversation.id)
+      const normalized = enrichConversation(conversation)
+      const index = conversations.value.findIndex(c => c.id === normalized.id)
       if (index !== -1) {
-        conversations.value[index] = conversation
+        conversations.value[index] = { ...conversations.value[index], ...normalized }
       } else {
-        addConversation(conversation)
+        conversations.value.unshift(normalized)
       }
+      sortConversations()
       
-      // Se for a conversa ativa, atualiza também
-      if (activeConversation.value?.id === conversation.id) {
-        activeConversation.value = conversation
-        if (conversation.messages) {
-          messages.value = conversation.messages
-          const lastMessage = conversation.messages[conversation.messages.length - 1]
-          updateConversationMetadata(conversation.id, lastMessage)
+      if (activeConversation.value?.id === normalized.id) {
+        activeConversation.value = { ...activeConversation.value, ...normalized }
+        if (normalized.messages) {
+          messages.value = [...normalized.messages]
+          messages.value.sort((a, b) => {
+            const dateA = new Date(a.timestamp || a.createdAt).getTime()
+            const dateB = new Date(b.timestamp || b.createdAt).getTime()
+            return dateA - dateB
+          })
+          const lastMessage = messages.value[messages.value.length - 1]
+          updateConversationMetadata(normalized.id, lastMessage)
         }
       }
     })
