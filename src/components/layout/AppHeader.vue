@@ -71,7 +71,6 @@ const pageTitle = computed(() => {
     '/': 'Dashboard',
     '/conversas': 'Conversas',
     '/contatos': 'Contatos',
-    '/historico': 'Histórico',
     '/campanhas': 'Campanhas',
     '/campanhas/nova': 'Nova Campanha',
     '/relatorios': 'Relatórios',

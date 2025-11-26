@@ -5,6 +5,7 @@ import { ConversationStatus } from '@/types'
 import { wsService } from '@/services/websocket.service'
 import { conversationService } from '@/services/conversation.service'
 import { messageService } from '@/services/message.service'
+import { logger } from '@/utils/logger'
 
 const MEDIA_PREVIEW_MAP: Record<string, string> = {
   IMAGE: '[Imagem recebida]',
@@ -167,14 +168,13 @@ export const useConversationStore = defineStore('conversation', () => {
       conversations.value = response.data.map(conv => enrichConversation(conv))
       sortConversations()
     } catch (error) {
-      console.error('Erro ao carregar conversas:', error)
+      logger.error('Erro ao carregar conversas', error)
     } finally {
       loading.value = false
     }
   }
 
   async function selectConversation(conversationId: string) {
-    console.log('Selecionando conversa:', conversationId)
     const isSameConversation = activeConversation.value?.id === conversationId
 
     try {
@@ -215,52 +215,32 @@ export const useConversationStore = defineStore('conversation', () => {
       }
       wsService.joinRoom(conversationId)
     } catch (error) {
-      console.error('Erro ao selecionar conversa:', error)
+      logger.error('Erro ao selecionar conversa', error)
       // Não usar fallback mockado - deixar erro propagar ou mostrar mensagem ao usuário
       throw error
     }
   }
 
   function addMessage(message: Message) {
-    console.log('📝 Adicionando mensagem ao store:', message)
-    console.log('📝 Direção da mensagem:', message.direction)
-    console.log('📝 fromMe:', (message as any).fromMe)
-    console.log('📝 senderId:', message.senderId)
-    console.log('📝 senderName:', message.senderName)
-    
     // Evitar duplicatas
     const exists = messages.value.find(m => m.id === message.id)
     if (exists) {
-      console.log('⚠️ Mensagem já existe, atualizando...')
       // Atualiza mensagem existente se necessário (ex: status mudou)
       const index = messages.value.findIndex(m => m.id === message.id)
       if (index !== -1) {
         messages.value[index] = { ...messages.value[index], ...message }
-        console.log('✅ Mensagem atualizada:', messages.value[index])
       }
       return
     }
     
     // Verifica se é da conversa ativa
     if (activeConversation.value?.id === message.conversationId) {
-      console.log('✅ Adicionando mensagem à lista (conversa ativa)')
       messages.value.push(message)
       // Ordena após adicionar (mais antigas primeiro)
       messages.value.sort((a, b) => {
         const dateA = new Date(a.timestamp || a.createdAt).getTime()
         const dateB = new Date(b.timestamp || b.createdAt).getTime()
         return dateA - dateB
-      })
-      console.log('✅ Total de mensagens após adicionar:', messages.value.length)
-      console.log('✅ Últimas 3 mensagens:', messages.value.slice(-3).map(m => ({
-        id: m.id,
-        direction: m.direction,
-        content: m.content?.substring(0, 30)
-      })))
-    } else {
-      console.log('⚠️ Mensagem ignorada (não é da conversa ativa):', {
-        messageConversationId: message.conversationId,
-        activeConversationId: activeConversation.value?.id
       })
     }
     
@@ -288,40 +268,25 @@ export const useConversationStore = defineStore('conversation', () => {
         messages.value = []
       }
     } catch (error) {
-      console.error('Erro ao fechar conversa:', error)
+      logger.error('Erro ao fechar conversa', error)
       throw error
     }
   }
 
   function setupWebSocketListeners() {
-    console.log('Configurando listeners do WebSocket...')
-    
     // Escuta evento new_message conforme documentação do backend
     // Payload: { conversationId: string, message: Message }
     wsService.on('new_message', (data: { conversationId: string; message: Message }) => {
-      console.log('🔔 Nova mensagem recebida via WebSocket:', data)
       const { conversationId, message } = data
-      console.log('🔔 Detalhes:', {
-        id: message.id,
-        conversationId,
-        direction: message.direction,
-        content: message.content?.substring(0, 50),
-        senderName: message.senderName,
-        fromMe: (message as any).fromMe
-      })
-      console.log('Conversa ativa:', activeConversation.value?.id)
-      console.log('Conversa da mensagem:', conversationId)
-      console.log('É da conversa ativa?', activeConversation.value?.id === conversationId)
       // Se a conversa não existe na lista, tentar carregar da API
       if (!ensureConversationPresence(conversationId)) {
-        loadConversations().catch(err => console.error('Erro ao carregar conversas após nova mensagem:', err))
+        loadConversations().catch(err => logger.error('Erro ao carregar conversas após nova mensagem', err))
       }
       addMessage(message)
     })
 
     // Escuta atualizações de status de mensagens
     wsService.on('message_updated', (data: { conversationId: string; message: Message }) => {
-      console.log('🔔 Mensagem atualizada via WebSocket:', data)
       const { conversationId, message } = data
       // Atualiza a mensagem na lista se estiver na conversa ativa
       if (activeConversation.value?.id === conversationId) {
@@ -333,7 +298,6 @@ export const useConversationStore = defineStore('conversation', () => {
     })
 
     wsService.on('conversation_updated', (conversation: Conversation) => {
-      console.log('Conversa atualizada via WebSocket:', conversation)
       const normalized = enrichConversation(conversation)
       const index = conversations.value.findIndex(c => c.id === normalized.id)
       if (index !== -1) {
@@ -359,7 +323,6 @@ export const useConversationStore = defineStore('conversation', () => {
     })
 
     wsService.on('conversation:closed', (data: { conversationId: string } | Conversation) => {
-      console.log('Conversa fechada via WebSocket:', data)
       // O payload pode ser { conversationId } ou Conversation completo
       const conversationId = 'conversationId' in data ? data.conversationId : data.id
       

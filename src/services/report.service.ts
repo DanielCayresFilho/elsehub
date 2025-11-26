@@ -66,6 +66,54 @@ export const reportService = {
       params: filters
     })
     return data
+  },
+
+  /**
+   * GET /api/reports/statistics/export
+   * Exporta estatísticas gerais do sistema em CSV
+   */
+  async exportStatistics(filters: ReportFilters = {}): Promise<Blob> {
+    const { data } = await api.get<Blob>('/reports/statistics/export', {
+      params: filters,
+      responseType: 'blob'
+    })
+    return data
+  },
+
+  /**
+   * GET /api/reports/operator-performance/export
+   * Exporta relatório de performance de operadores em CSV
+   */
+  async exportOperatorPerformance(filters: ReportFilters = {}): Promise<Blob> {
+    const { data } = await api.get<Blob>('/reports/operator-performance/export', {
+      params: filters,
+      responseType: 'blob'
+    })
+    return data
+  },
+
+  /**
+   * GET /api/reports/campaigns/export
+   * Exporta relatório completo de campanhas em CSV
+   */
+  async exportCampaigns(filters: ReportFilters = {}): Promise<Blob> {
+    const { data } = await api.get<Blob>('/reports/campaigns/export', {
+      params: filters,
+      responseType: 'blob'
+    })
+    return data
+  },
+
+  /**
+   * GET /api/reports/messages/export
+   * Exporta relatório de mensagens enviadas/recebidas em CSV
+   */
+  async exportMessages(filters: ReportFilters = {}): Promise<Blob> {
+    const { data } = await api.get<Blob>('/reports/messages/export', {
+      params: filters,
+      responseType: 'blob'
+    })
+    return data
   }
 }
 

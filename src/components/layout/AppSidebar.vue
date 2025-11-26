@@ -38,12 +38,6 @@
               <span v-if="!isCollapsed">Contatos</span>
             </router-link>
           </li>
-          <li>
-            <router-link to="/historico" class="nav-link">
-              <i class="fas fa-history"></i>
-              <span v-if="!isCollapsed">Histórico</span>
-            </router-link>
-          </li>
         </ul>
       </div>
 
@@ -53,7 +47,7 @@
         <ul class="nav-list">
           <li>
             <router-link to="/campanhas" class="nav-link" exact>
-              <i class="fas fa-megaphone"></i>
+              <i class="fas fa-bullhorn"></i>
               <span v-if="!isCollapsed">Campanhas</span>
             </router-link>
           </li>

@@ -13,7 +13,7 @@
             <h2>Comece agora</h2>
             <p>Gerencie suas conversas, contatos e campanhas de forma eficiente</p>
             <div class="quick-links">
-              <router-link to="/conversas" class="btn-primary">
+              <router-link to="/conversas" class="btn-conversas">
                 <i class="fas fa-message"></i>
                 Ver Conversas
               </router-link>
@@ -105,6 +105,22 @@
   gap: $spacing-md;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+.btn-conversas {
+  @include button-base;
+  background: $success;
+  color: white;
+  box-shadow: 0 2px 8px rgba($success, 0.25);
+
+  &:hover:not(:disabled) {
+    background: darken($success, 8%);
+    box-shadow: 0 4px 12px rgba($success, 0.35);
+  }
+
+  i {
+    margin-right: $spacing-xs;
+  }
 }
 
 @include mobile {

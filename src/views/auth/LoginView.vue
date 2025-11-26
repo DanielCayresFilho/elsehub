@@ -61,6 +61,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { getErrorMessage, ErrorMessages, shouldRedirectToLogin } from '@/utils/errorHandler'
+import { logger } from '@/utils/logger'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -77,51 +79,41 @@ const handleLogin = async () => {
   loading.value = true
   error.value = null
 
-  console.log('LoginView: Starting login process')
-
   try {
     const response = await authStore.login(form.value)
     
-    console.log('LoginView: Login response:', response)
-    
     if (!response) {
-      console.error('LoginView: No response from login')
-      error.value = 'Erro ao processar login. Tente novamente.'
+      error.value = ErrorMessages.login.default
       return
     }
     
     if (!response.accessToken || !response.user) {
-      console.error('LoginView: Invalid response structure:', response)
-      error.value = 'Erro ao processar login. Tente novamente.'
+      error.value = ErrorMessages.login.default
       return
     }
-    
-    console.log('LoginView: Login successful, redirecting...')
     
     // Wait a bit to ensure everything is properly saved
     await new Promise(resolve => setTimeout(resolve, 300))
     
     // Force reload to clear any stale state
-    console.log('LoginView: Redirecting to dashboard')
     window.location.href = '/'
     
   } catch (err: any) {
-    console.error('LoginView: Login error:', err)
+    logger.error('Erro no login', err)
     
-    let errorMsg = 'Erro ao fazer login. Verifique suas credenciais.'
-    
-    if (err.response?.data?.message) {
-      const apiMessage = err.response.data.message
-      if (Array.isArray(apiMessage)) {
-        errorMsg = apiMessage.join(', ')
-      } else {
-        errorMsg = apiMessage
-      }
-    } else if (err.message) {
-      errorMsg = err.message
+    // Mensagens específicas para login
+    if (err?.response?.status === 401) {
+      error.value = ErrorMessages.login.invalid
+    } else if (err?.request && !err?.response) {
+      error.value = ErrorMessages.login.network
+    } else {
+      error.value = getErrorMessage(err, ErrorMessages.login.default)
     }
     
-    error.value = errorMsg
+    // Redirecionar se necessário
+    if (shouldRedirectToLogin(err)) {
+      // Já estamos na tela de login, não precisa redirecionar
+    }
   } finally {
     loading.value = false
   }

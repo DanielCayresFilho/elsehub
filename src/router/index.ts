@@ -34,12 +34,6 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/historico',
-    name: 'History',
-    component: () => import('@/views/history/HistoryView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
     path: '/campanhas',
     name: 'Campaigns',
     component: () => import('@/views/campaigns/CampaignsListView.vue'),

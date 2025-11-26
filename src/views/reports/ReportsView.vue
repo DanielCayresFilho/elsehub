@@ -18,6 +18,49 @@
       </div>
     </div>
 
+    <!-- Exportações CSV -->
+    <div class="export-card card">
+      <h3>Exportar Relatórios CSV</h3>
+      <div class="export-grid">
+        <button 
+          @click="exportStatistics" 
+          class="export-btn"
+          :disabled="exporting"
+        >
+          <i class="fas fa-file-csv"></i>
+          <span>Estatísticas Gerais</span>
+        </button>
+        <button 
+          @click="exportOperatorPerformance" 
+          class="export-btn"
+          :disabled="exporting"
+        >
+          <i class="fas fa-file-csv"></i>
+          <span>Performance de Operadores</span>
+        </button>
+        <button 
+          @click="exportCampaigns" 
+          class="export-btn"
+          :disabled="exporting"
+        >
+          <i class="fas fa-file-csv"></i>
+          <span>Relatório de Campanhas</span>
+        </button>
+        <button 
+          @click="exportMessages" 
+          class="export-btn"
+          :disabled="exporting"
+        >
+          <i class="fas fa-file-csv"></i>
+          <span>Relatório de Mensagens</span>
+        </button>
+      </div>
+      <p v-if="exporting" class="export-status">
+        <i class="fas fa-spinner fa-spin"></i>
+        Gerando arquivo...
+      </p>
+    </div>
+
     <div class="stats-grid">
       <div class="stat-card card">
         <h3>Total de Conversas</h3>
@@ -61,6 +104,9 @@
 import { ref, onMounted } from 'vue'
 import type { Statistics, OperatorPerformance } from '@/types'
 import { reportService } from '@/services/report.service'
+import { downloadCsv, generateCsvFilename } from '@/utils/downloadCsv'
+import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/errorHandler'
 
 const stats = ref<Statistics>({
   totalConversations: 0,
@@ -72,20 +118,13 @@ const stats = ref<Statistics>({
 })
 const performance = ref<OperatorPerformance[]>([])
 const loading = ref(false)
+const exporting = ref(false)
 const filters = ref({ startDate: '', endDate: '' })
 
 const loadReports = async () => {
   loading.value = true
   try {
-    const apiFilters: any = {}
-    if (filters.value.startDate) {
-      apiFilters.startDate = new Date(filters.value.startDate).toISOString()
-    }
-    if (filters.value.endDate) {
-      const endDate = new Date(filters.value.endDate)
-      endDate.setHours(23, 59, 59, 999)
-      apiFilters.endDate = endDate.toISOString()
-    }
+    const apiFilters = buildFilters()
 
     const [statisticsData, performanceData] = await Promise.all([
       reportService.getStatistics(apiFilters),
@@ -104,7 +143,7 @@ const loadReports = async () => {
     }
     performance.value = performanceData
   } catch (error) {
-    console.error('Erro ao carregar relatórios:', error)
+    logger.error('Erro ao carregar relatórios', error)
     stats.value = {
       totalConversations: 0,
       activeConversations: 0,
@@ -116,6 +155,71 @@ const loadReports = async () => {
     performance.value = []
   } finally {
     loading.value = false
+  }
+}
+
+const buildFilters = () => {
+  const apiFilters: any = {}
+  if (filters.value.startDate) {
+    apiFilters.startDate = new Date(filters.value.startDate).toISOString()
+  }
+  if (filters.value.endDate) {
+    const endDate = new Date(filters.value.endDate)
+    endDate.setHours(23, 59, 59, 999)
+    apiFilters.endDate = endDate.toISOString()
+  }
+  return apiFilters
+}
+
+const exportStatistics = async () => {
+  exporting.value = true
+  try {
+    const blob = await reportService.exportStatistics(buildFilters())
+    downloadCsv(blob, generateCsvFilename('estatisticas-gerais'))
+  } catch (error) {
+    logger.error('Erro ao exportar estatísticas', error)
+    alert(getErrorMessage(error, 'Erro ao exportar estatísticas. Tente novamente.'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+const exportOperatorPerformance = async () => {
+  exporting.value = true
+  try {
+    const blob = await reportService.exportOperatorPerformance(buildFilters())
+    downloadCsv(blob, generateCsvFilename('performance-operadores'))
+  } catch (error) {
+    logger.error('Erro ao exportar performance de operadores', error)
+    alert(getErrorMessage(error, 'Erro ao exportar performance de operadores. Tente novamente.'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+const exportCampaigns = async () => {
+  exporting.value = true
+  try {
+    const blob = await reportService.exportCampaigns(buildFilters())
+    downloadCsv(blob, generateCsvFilename('relatorio-campanhas'))
+  } catch (error) {
+    logger.error('Erro ao exportar campanhas', error)
+    alert(getErrorMessage(error, 'Erro ao exportar campanhas. Tente novamente.'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+const exportMessages = async () => {
+  exporting.value = true
+  try {
+    const blob = await reportService.exportMessages(buildFilters())
+    downloadCsv(blob, generateCsvFilename('relatorio-mensagens'))
+  } catch (error) {
+    logger.error('Erro ao exportar mensagens', error)
+    alert(getErrorMessage(error, 'Erro ao exportar mensagens. Tente novamente.'))
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -223,6 +327,69 @@ onMounted(() => {
         border-color: $border-dark;
       }
     }
+  }
+}
+
+.export-card {
+  margin-bottom: $spacing-xl;
+  padding: $spacing-lg;
+
+  h3 {
+    margin-bottom: $spacing-lg;
+    border: none;
+    padding: 0;
+  }
+}
+
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: $spacing-md;
+}
+
+.export-btn {
+  @include button-base;
+  @include flex-center;
+  flex-direction: column;
+  gap: $spacing-xs;
+  padding: $spacing-lg;
+  background: rgba($success, 0.1);
+  color: $success;
+  border: 1px solid rgba($success, 0.2);
+  font-size: 0.875rem;
+
+  &:hover:not(:disabled) {
+    background: rgba($success, 0.2);
+    border-color: rgba($success, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  i {
+    font-size: 1.5rem;
+    margin-bottom: $spacing-xs;
+  }
+
+  span {
+    font-weight: 500;
+  }
+}
+
+.export-status {
+  margin-top: $spacing-md;
+  text-align: center;
+  color: $text-secondary-light;
+  font-size: 0.875rem;
+
+  .dark & {
+    color: $text-secondary-dark;
+  }
+
+  i {
+    margin-right: $spacing-xs;
   }
 }
 </style>

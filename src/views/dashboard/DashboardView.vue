@@ -95,7 +95,7 @@
                   <span class="conversation-time">{{ formatDate(conversation.lastMessageAt) }}</span>
                 </div>
                 <p class="conversation-message">
-                  {{ conversation.messages?.[conversation.messages.length - 1]?.content || 'Sem mensagens' }}
+                  {{ conversation.lastMessagePreview || conversation.messages?.[conversation.messages.length - 1]?.content || 'Sem mensagens' }}
                 </p>
               </div>
               <span :class="['status-indicator', conversation.status.toLowerCase()]"></span>
@@ -183,6 +183,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { conversationService } from '@/services/conversation.service'
 import { reportService } from '@/services/report.service'
+import { logger } from '@/utils/logger'
 import type { Conversation, Statistics } from '@/types'
 import { ConversationStatus } from '@/types'
 
@@ -216,15 +217,18 @@ const loadDashboardData = async () => {
     // Carregar estatísticas
     const statistics = await reportService.getStatistics()
     stats.value = {
-      totalConversations: statistics.totalConversations,
-      activeConversations: statistics.openConversations,
-      closedConversations: statistics.closedConversations,
-      totalMessages: statistics.totalMessages,
-      averageResponseTime: statistics.avgResponseTime,
-      responseRate: statistics.avgResponseTime > 0 ? Math.round((statistics.avgResponseTime / 120) * 100) : 0
+      totalConversations: statistics.totalConversations || 0,
+      activeConversations: statistics.openConversations || 0,
+      closedConversations: statistics.closedConversations || 0,
+      totalMessages: statistics.totalMessages || 0,
+      averageResponseTime: statistics.avgResponseTime || 0,
+      responseRate: statistics.totalConversations > 0 && statistics.closedConversations > 0
+        ? Math.round((statistics.closedConversations / statistics.totalConversations) * 100)
+        : 0
     }
   } catch (error) {
-    console.error('Erro ao carregar dados do dashboard:', error)
+    logger.error('Erro ao carregar dados do dashboard', error)
+    // Manter valores padrão (já inicializados como 0)
   } finally {
     loading.value = false
   }

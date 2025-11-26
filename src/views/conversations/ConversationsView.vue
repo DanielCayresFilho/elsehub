@@ -386,6 +386,8 @@ import { serviceInstanceService } from '@/services/service-instance.service'
 import { contactService } from '@/services/contact.service'
 import { messageService } from '@/services/message.service'
 import { wsService } from '@/services/websocket.service'
+import { getErrorMessage, ErrorMessages, shouldRedirectToLogin } from '@/utils/errorHandler'
+import { logger } from '@/utils/logger'
 import type { User, Tabulation, ServiceInstance, Contact, Message, Conversation } from '@/types'
 
 const conversationStore = useConversationStore()
@@ -491,19 +493,17 @@ const loadConversations = async () => {
 const selectConversation = async (id: string) => {
   activeConversationId.value = id
   try {
-    console.log('Selecionando conversa na view:', id)
     await conversationStore.selectConversation(id)
     
     // Força scroll após carregar mensagens
     await nextTick()
     scrollToBottom()
     
-    // Log para debug
-    console.log('Mensagens após selecionar:', conversationStore.messages.length)
     closeSidebarOnMobile()
   } catch (error) {
-    console.error('Erro ao selecionar conversa:', error)
-    alert('Erro ao carregar conversa. Verifique o console para mais detalhes.')
+    logger.error('Erro ao selecionar conversa', error)
+    const errorMsg = getErrorMessage(error, 'Erro ao carregar conversa. Tente novamente.')
+    alert(errorMsg)
   }
 }
 
@@ -549,7 +549,6 @@ const sendMessage = async () => {
   try {
     // Enviar via HTTP API (que usa Evolution API)
     const sentMessage = await messageService.sendMessage(activeConversationId.value, messageContent)
-    console.log('Mensagem enviada:', sentMessage)
     
     // Adiciona a mensagem imediatamente à lista (otimista)
     // NÃO recarrega a conversa para não perder as mensagens já carregadas
@@ -561,36 +560,22 @@ const sendMessage = async () => {
     
     // NÃO recarrega a conversa - a mensagem já foi adicionada e o WebSocket vai atualizar
   } catch (error: any) {
-    console.error('Erro ao enviar mensagem:', error)
+    logger.error('Erro ao enviar mensagem', error)
     // Restaurar mensagem em caso de erro
     newMessage.value = messageContent
     
     // Tratamento de erros mais específico
-    let errorMessage = 'Erro ao enviar mensagem'
+    let errorMessage = ErrorMessages.send.default
     
-    if (error.response) {
-      const status = error.response.status
-      const data = error.response.data
-      
-      if (status === 404) {
-        errorMessage = 'Conversa não encontrada. Por favor, recarregue a página.'
-      } else if (status === 400) {
-        errorMessage = data?.message || 'Dados inválidos. Verifique a mensagem.'
-      } else if (status === 401) {
-        errorMessage = 'Sessão expirada. Por favor, faça login novamente.'
-        // Opcional: redirecionar para login
-        // window.location.href = '/login'
-      } else if (status === 403) {
-        errorMessage = 'Você não tem permissão para enviar mensagens nesta conversa.'
-      } else if (status === 500) {
-        errorMessage = 'Erro interno do servidor. Tente novamente em alguns instantes.'
-      } else {
-        errorMessage = data?.message || `Erro ao enviar mensagem (${status})`
-      }
-    } else if (error.request) {
-      errorMessage = 'Não foi possível conectar ao servidor. Verifique sua conexão.'
-    } else if (error.message) {
-      errorMessage = error.message
+    if (error?.response?.status === 404) {
+      errorMessage = ErrorMessages.send.conversation
+    } else {
+      errorMessage = getErrorMessage(error, ErrorMessages.send.default)
+    }
+    
+    if (shouldRedirectToLogin(error)) {
+      window.location.href = '/login'
+      return
     }
     
     alert(errorMessage)
@@ -607,8 +592,8 @@ const transferConversation = async () => {
     activeConversationId.value = null
     await loadConversations()
   } catch (error) {
-    console.error('Erro ao transferir conversa:', error)
-    alert('Erro ao transferir conversa')
+    logger.error('Erro ao transferir conversa', error)
+    alert(getErrorMessage(error, 'Erro ao transferir conversa. Tente novamente.'))
   }
 }
 
@@ -622,8 +607,8 @@ const loadInstances = async () => {
   try {
     instances.value = (await serviceInstanceService.getInstances()).filter(i => i.isActive)
   } catch (error) {
-    console.error('Erro ao carregar instâncias:', error)
-    alert('Erro ao carregar instâncias')
+    logger.error('Erro ao carregar instâncias', error)
+    // Erro silencioso - não precisa alertar usuário
   }
 }
 
@@ -637,8 +622,8 @@ const loadContacts = async () => {
     const response = await contactService.getContacts({ page: 1, limit: 100 })
     contacts.value = response.data
   } catch (error) {
-    console.error('Erro ao carregar contatos:', error)
-    alert('Erro ao carregar contatos')
+    logger.error('Erro ao carregar contatos', error)
+    // Erro silencioso - não crítico para funcionamento
   } finally {
     loadingContacts.value = false
   }
@@ -671,8 +656,9 @@ const createContact = async () => {
       additional2: ''
     }
   } catch (error: any) {
-    console.error('Erro ao criar contato:', error)
-    alert(error.response?.data?.message || 'Erro ao criar contato')
+    logger.error('Erro ao criar contato', error)
+    const errorMsg = getErrorMessage(error, 'Erro ao criar contato. Verifique os dados e tente novamente.')
+    alert(errorMsg)
   } finally {
     creatingContact.value = false
   }
@@ -704,36 +690,23 @@ const sendNewMessage = async () => {
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
-    console.log('🔄 Criando/encontrando conversa...')
-    console.log('Contact ID:', newMessageContactId.value)
-    console.log('Instance ID:', newMessageInstanceId.value)
-
     // Find or create conversation - melhorar lógica de busca
     let conversation = conversations.value.find(c => {
       const contactId = c.contact?.id || c.contactId
       const instanceId = c.serviceInstance?.id || c.serviceInstanceId
-      const match = contactId === newMessageContactId.value && instanceId === newMessageInstanceId.value
-      console.log('Verificando conversa:', c.id, 'contact:', contactId, 'instance:', instanceId, 'match:', match)
-      return match
+      return contactId === newMessageContactId.value && instanceId === newMessageInstanceId.value
     })
 
     if (!conversation) {
-      console.log('📝 Criando nova conversa...')
       conversation = await conversationService.createConversation({
         contactId: newMessageContactId.value,
         serviceInstanceId: newMessageInstanceId.value
       })
-      console.log('✅ Conversa criada:', conversation.id)
       await loadConversations()
-    } else {
-      console.log('✅ Conversa existente encontrada:', conversation.id)
     }
-
-    console.log('📤 Enviando mensagem para conversa:', conversation.id, 'pela instância:', conversation.serviceInstanceId || conversation.serviceInstance?.id)
 
     // Enviar mensagem via HTTP API
     const sentMessage = await messageService.sendMessage(conversation.id, newMessageContent.value.trim())
-    console.log('✅ Mensagem enviada:', sentMessage.id)
 
     // Close modal and select conversation
     showNewMessageModal.value = false
@@ -744,9 +717,13 @@ const sendNewMessage = async () => {
     newMessageContactId.value = ''
     newMessageContent.value = ''
   } catch (error: any) {
-    console.error('❌ Erro ao enviar mensagem:', error)
-    console.error('Detalhes do erro:', error.response?.data)
-    alert(error.response?.data?.message || 'Erro ao enviar mensagem')
+    logger.error('Erro ao enviar nova mensagem', error)
+    const errorMsg = getErrorMessage(error, ErrorMessages.send.default)
+    alert(errorMsg)
+    
+    if (shouldRedirectToLogin(error)) {
+      window.location.href = '/login'
+    }
   } finally {
     sendingMessage.value = false
   }
@@ -761,8 +738,8 @@ const closeConversation = async () => {
     selectedTabulationId.value = ''
     activeConversationId.value = null
   } catch (error) {
-    console.error('Erro ao finalizar conversa:', error)
-    alert('Erro ao finalizar conversa')
+    logger.error('Erro ao finalizar conversa', error)
+    alert(getErrorMessage(error, 'Erro ao finalizar conversa. Tente novamente.'))
   }
 }
 
@@ -775,7 +752,8 @@ const loadOperatorsAndTabulations = async () => {
     onlineOperators.value = operatorsData
     tabulations.value = tabulationsData
   } catch (error) {
-    console.error('Erro ao carregar dados:', error)
+    logger.error('Erro ao carregar operadores e tabulações', error)
+    // Erro silencioso - não crítico
   }
 }
 
@@ -914,8 +892,8 @@ const ensureMediaLoaded = async (message: Message, force = false) => {
     }
     mediaUrls.value[messageId] = fallbackUrl
   } catch (error: any) {
-    console.error('Erro ao carregar mídia:', error)
-    mediaErrors.value[messageId] = 'Mídia não disponível no modo offline'
+    logger.error('Erro ao carregar mídia', error)
+    mediaErrors.value[messageId] = 'Mídia não disponível'
   } finally {
     mediaLoadingState.value[messageId] = false
   }
@@ -1014,12 +992,12 @@ const startMessagePolling = () => {
         
         // Atualiza mensagens se houver novas
         if (newMessages.length > currentCount) {
-          console.log('🔄 Polling: Novas mensagens encontradas', newMessages.length - currentCount)
           // Atualiza o store com as mensagens mais recentes
           conversationStore.setMessages(newMessages)
         }
       } catch (error) {
-        console.error('Erro ao fazer polling de mensagens:', error)
+        logger.error('Erro ao fazer polling de mensagens', error)
+        // Erro silencioso - polling continuará tentando
       }
     }
   }, 3000) // Poll a cada 3 segundos
@@ -1035,10 +1013,8 @@ const stopMessagePolling = () => {
 // Observa mudanças na conversa ativa para iniciar/parar polling
 watch(activeConversationId, (newId) => {
   if (newId) {
-    console.log('🔄 Iniciando polling de mensagens para conversa:', newId)
     startMessagePolling()
   } else {
-    console.log('🛑 Parando polling de mensagens')
     stopMessagePolling()
   }
 })
@@ -1051,13 +1027,8 @@ onMounted(() => {
     isMobileSidebarOpen.value = true
   }
   
-  // Log para debug
-  console.log('ConversationsView montado')
-  console.log('WebSocket conectado?', wsService.isConnected())
-  
   // Verifica se WebSocket está conectado, se não, tenta conectar
   if (!wsService.isConnected()) {
-    console.log('WebSocket não conectado, tentando conectar...')
     wsService.connect()
   }
   
