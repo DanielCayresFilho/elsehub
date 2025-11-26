@@ -5,7 +5,7 @@
     <template v-else-if="campaign">
       <div class="page-header">
         <h2>{{ campaign.name }}</h2>
-        <span :class="['status-badge', campaign.status.toLowerCase()]">
+        <span :class="['status-badge', getStatusClass(campaign.status)]">
           {{ getStatusText(campaign.status) }}
         </span>
       </div>
@@ -53,11 +53,11 @@
         <div class="info-grid">
           <div class="info-item">
             <strong>Instância:</strong>
-            <span>{{ campaign.serviceInstance?.name }}</span>
+            <span>{{ campaign.serviceInstanceName || 'Não informada' }}</span>
           </div>
           <div class="info-item">
             <strong>Template:</strong>
-            <span>{{ campaign.template?.name || 'Nenhum' }}</span>
+            <span>{{ campaign.templateName || 'Nenhum template' }}</span>
           </div>
           <div class="info-item">
             <strong>Delay:</strong>
@@ -65,7 +65,15 @@
           </div>
           <div class="info-item">
             <strong>Criada em:</strong>
-            <span>{{ formatDateTime(campaign.createdAt) }}</span>
+            <span>{{ campaign.createdAt ? formatDateTime(campaign.createdAt) : '-' }}</span>
+          </div>
+          <div class="info-item" v-if="campaign.startedAt">
+            <strong>Iniciada em:</strong>
+            <span>{{ formatDateTime(campaign.startedAt) }}</span>
+          </div>
+          <div class="info-item" v-if="campaign.finishedAt">
+            <strong>Finalizada em:</strong>
+            <span>{{ formatDateTime(campaign.finishedAt) }}</span>
           </div>
         </div>
 
@@ -198,8 +206,30 @@ const getStatusText = (status: string) => {
   return texts[status] || status
 }
 
-const formatDateTime = (date: string) => {
-  return new Date(date).toLocaleString('pt-BR')
+const getStatusClass = (status: string) => {
+  const classes: Record<string, string> = {
+    PENDING: 'pending',
+    PROCESSING: 'processing',
+    PAUSED: 'paused',
+    COMPLETED: 'completed',
+    FAILED: 'failed'
+  }
+  return classes[status] || ''
+}
+
+const formatDateTime = (date: string | null | undefined) => {
+  if (!date) return '-'
+  try {
+    return new Date(date).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (error) {
+    return date
+  }
 }
 
 onMounted(() => {
@@ -232,11 +262,26 @@ onMounted(() => {
   font-size: 0.875rem;
   font-weight: 500;
 
-  &.pending { background: rgba($text-secondary-light, 0.1); color: $text-secondary-light; }
-  &.processing { background: rgba($primary-light, 0.1); color: $primary-light; }
-  &.paused { background: rgba($warning, 0.1); color: $warning; }
-  &.completed { background: rgba($success, 0.1); color: $success; }
-  &.failed { background: rgba($error, 0.1); color: $error; }
+  &.pending { 
+    background: rgba($text-secondary-light, 0.1); 
+    color: $text-secondary-light; 
+  }
+  &.processing { 
+    background: rgba($primary-light, 0.1); 
+    color: $primary-light; 
+  }
+  &.paused { 
+    background: rgba($warning, 0.1); 
+    color: $warning; 
+  }
+  &.completed { 
+    background: rgba($success, 0.1); 
+    color: $success; 
+  }
+  &.failed { 
+    background: rgba($error, 0.1); 
+    color: $error; 
+  }
 }
 
 .stats-grid {
@@ -292,7 +337,7 @@ onMounted(() => {
 
   .info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: $spacing-lg;
     margin-bottom: $spacing-xl;
   }
