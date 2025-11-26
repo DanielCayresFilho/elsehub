@@ -29,12 +29,13 @@
 
         <div class="form-group">
           <label for="template">Template (Opcional)</label>
-          <select id="template" v-model="form.templateId" :disabled="saving">
+          <select id="template" v-model="form.templateId" :disabled="saving || !form.serviceInstanceId">
             <option value="">Nenhum template</option>
-            <option v-for="template in templates" :key="template.id" :value="template.id">
+            <option v-for="template in filteredTemplates" :key="template.id" :value="template.id">
               {{ template.name }}
             </option>
           </select>
+          <small v-if="!form.serviceInstanceId">Selecione uma instância primeiro</small>
         </div>
 
         <div class="form-group">
@@ -109,11 +110,30 @@
             </div>
           </div>
           <div v-if="uploadError" class="error-message">{{ uploadError }}</div>
+          <div v-if="csvUploaded" class="success-message">
+            <i class="fas fa-check-circle"></i>
+            CSV enviado com sucesso! Você pode iniciar a campanha agora ou fazer upload de outro arquivo.
+          </div>
         </div>
         <div class="modal-footer">
-          <button @click="closeUploadModal" class="btn-secondary" :disabled="uploading">Pular</button>
-          <button @click="uploadCSV" class="btn-primary" :disabled="!selectedFile || uploading">
+          <button @click="closeUploadModal" class="btn-secondary" :disabled="uploading || starting">
+            {{ csvUploaded ? 'Fechar' : 'Pular' }}
+          </button>
+          <button 
+            v-if="!csvUploaded"
+            @click="uploadCSV" 
+            class="btn-primary" 
+            :disabled="!selectedFile || uploading"
+          >
             {{ uploading ? 'Enviando...' : 'Enviar CSV' }}
+          </button>
+          <button 
+            v-if="csvUploaded"
+            @click="startCampaign" 
+            class="btn-primary" 
+            :disabled="starting"
+          >
+            {{ starting ? 'Iniciando...' : 'Iniciar Campanha' }}
           </button>
         </div>
       </div>
@@ -122,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { campaignService } from '@/services/campaign.service'
 import { serviceInstanceService } from '@/services/service-instance.service'
@@ -141,6 +161,16 @@ const uploading = ref(false)
 const uploadError = ref('')
 const createdCampaignId = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const starting = ref(false)
+const csvUploaded = ref(false)
+
+const form = ref({
+  name: '',
+  serviceInstanceId: '',
+  templateId: '',
+  delaySeconds: 120,
+  scheduledAt: ''
+})
 
 const loadData = async () => {
   try {
@@ -149,12 +179,18 @@ const loadData = async () => {
       templateService.getTemplates()
     ])
     instances.value = instancesData.filter(i => i.isActive)
-    templates.value = templatesData // getTemplates retorna array direto, não objeto com data
+    templates.value = templatesData
   } catch (err) {
     console.error('Erro ao carregar dados:', err)
-    alert('Erro ao carregar dados')
+    error.value = 'Erro ao carregar dados. Tente recarregar a página.'
   }
 }
+
+// Filtrar templates pela instância selecionada
+const filteredTemplates = computed(() => {
+  if (!form.value.serviceInstanceId) return templates.value
+  return templates.value.filter(t => t.serviceInstanceId === form.value.serviceInstanceId)
+})
 
 const createCampaign = async () => {
   saving.value = true
@@ -177,6 +213,7 @@ const createCampaign = async () => {
 
     const campaign = await campaignService.createCampaign(payload)
     createdCampaignId.value = campaign.id
+    saving.value = false
     
     // Abrir modal de upload
     showUploadModal.value = true
@@ -224,9 +261,9 @@ const uploadCSV = async () => {
 
   try {
     const result = await campaignService.uploadContacts(createdCampaignId.value, selectedFile.value)
-    alert(`CSV enviado com sucesso! ${result.totalContacts} contatos adicionados.`)
-    closeUploadModal()
-    router.push('/campanhas')
+    csvUploaded.value = true
+    uploadError.value = ''
+    // Não fecha o modal, permite iniciar a campanha
   } catch (err: any) {
     uploadError.value = err.response?.data?.message || 'Erro ao enviar CSV'
   } finally {
@@ -234,20 +271,36 @@ const uploadCSV = async () => {
   }
 }
 
+const startCampaign = async () => {
+  if (!createdCampaignId.value) return
+
+  starting.value = true
+  uploadError.value = ''
+
+  try {
+    await campaignService.startCampaign(createdCampaignId.value)
+    alert('Campanha iniciada com sucesso!')
+    router.push('/campanhas')
+  } catch (err: any) {
+    uploadError.value = err.response?.data?.message || 'Erro ao iniciar campanha'
+  } finally {
+    starting.value = false
+  }
+}
+
 const closeUploadModal = () => {
-  if (uploading.value) return
+  if (uploading.value || starting.value) return
   
   showUploadModal.value = false
   selectedFile.value = null
   uploadError.value = ''
+  csvUploaded.value = false
   if (fileInput.value) {
     fileInput.value.value = ''
   }
   
-  // Se não fez upload, redireciona mesmo assim
-  if (createdCampaignId.value) {
-    router.push('/campanhas')
-  }
+  // Redireciona para lista de campanhas
+  router.push('/campanhas')
 }
 
 onMounted(() => {
@@ -478,6 +531,29 @@ onMounted(() => {
         color: $text-secondary-dark;
       }
     }
+  }
+}
+
+.error-message {
+  color: $error;
+  padding: $spacing-md;
+  background: rgba($error, 0.1);
+  border-radius: $radius-md;
+  margin-top: $spacing-md;
+}
+
+.success-message {
+  color: $success;
+  padding: $spacing-md;
+  background: rgba($success, 0.1);
+  border-radius: $radius-md;
+  margin-top: $spacing-md;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+
+  i {
+    font-size: 1.25rem;
   }
 }
 </style>
