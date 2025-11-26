@@ -634,8 +634,8 @@ const loadContacts = async () => {
   }
   loadingContacts.value = true
   try {
-    const response = await contactService.getContacts(1, 100)
-    contacts.value = response
+    const response = await contactService.getContacts({ page: 1, limit: 100 })
+    contacts.value = response.data
   } catch (error) {
     console.error('Erro ao carregar contatos:', error)
     alert('Erro ao carregar contatos')
@@ -1007,9 +1007,9 @@ const startMessagePolling = () => {
   messagePollInterval = setInterval(async () => {
     if (activeConversationId.value) {
       try {
-        // Busca mensagens da conversa ativa
-        // ✅ Conforme documentação: retorna array direto
-        const newMessages = await messageService.getMessages(activeConversationId.value, 1, 100)
+        // Busca mensagens da conversa ativa (formato paginado)
+        const paginated = await messageService.getMessages(activeConversationId.value, { page: 1, limit: 100 })
+        const newMessages = paginated.data
         const currentCount = messages.value.length
         
         // Atualiza mensagens se houver novas

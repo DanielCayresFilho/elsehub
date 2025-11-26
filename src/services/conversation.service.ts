@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Conversation } from '@/types'
+import type { Conversation, PaginatedResponse } from '@/types'
 import { ConversationStatus } from '@/types'
 
 interface CreateConversationRequest {
@@ -15,21 +15,50 @@ interface CloseConversationRequest {
   tabulationId: string
 }
 
+interface ConversationListParams {
+  page?: number
+  limit?: number
+  status?: ConversationStatus
+  operatorId?: string
+  serviceInstanceId?: string
+  search?: string
+}
+
 export const conversationService = {
   /**
    * GET /api/conversations
-   * Lista conversas com paginação
-   * Backend retorna array direto conforme documentação
+   * Lista conversas com paginação (formato { data, meta })
    */
-  async getConversations(page = 1, limit = 10, status?: ConversationStatus): Promise<Conversation[]> {
-    const { data } = await api.get<Conversation[]>('/conversations', {
+  async getConversations(params: ConversationListParams = {}): Promise<PaginatedResponse<Conversation>> {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      operatorId,
+      serviceInstanceId,
+      search
+    } = params
+
+    const { data } = await api.get<PaginatedResponse<Conversation>>('/conversations', {
       params: {
         page,
         limit,
-        ...(status && { status })
+        ...(status ? { status } : {}),
+        ...(operatorId ? { operatorId } : {}),
+        ...(serviceInstanceId ? { serviceInstanceId } : {}),
+        ...(search ? { search } : {})
       }
     })
-    return data || []
+
+    return {
+      data: data?.data ?? [],
+      meta: data?.meta ?? {
+        total: data?.data?.length ?? 0,
+        page,
+        limit,
+        totalPages: 1
+      }
+    }
   },
 
   /**

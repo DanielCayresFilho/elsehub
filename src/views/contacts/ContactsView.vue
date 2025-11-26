@@ -76,14 +76,16 @@
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="pagination">
-        <button 
-          @click="changePage(currentPage - 1)" 
+        <button
+          @click="changePage(currentPage - 1)"
           :disabled="currentPage === 1"
           class="btn-secondary btn-sm"
         >
           Anterior
         </button>
-        <span class="page-info">Página {{ currentPage }} de {{ totalPages }}</span>
+        <span class="page-info">
+          Página {{ currentPage }} de {{ totalPages }} • {{ totalItems }} contatos
+        </span>
         <button 
           @click="changePage(currentPage + 1)" 
           :disabled="currentPage === totalPages"
@@ -245,6 +247,8 @@ const loading = ref(true)
 const searchQuery = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
+const totalItems = ref(0)
+const pageSize = 25
 
 const showModal = ref(false)
 const showImportModal = ref(false)
@@ -282,14 +286,19 @@ watch(searchQuery, async () => {
 const loadContacts = async () => {
   loading.value = true
   try {
-    contacts.value = await contactService.getContacts(currentPage.value, 25, searchQuery.value || undefined)
-    // Como a API retorna array direto, calculamos totalPages baseado no tamanho
-    // Se houver menos que o limite, significa que é a última página
-    totalPages.value = contacts.value.length < 25 ? currentPage.value : currentPage.value + 1
+    const { data, meta } = await contactService.getContacts({
+      page: currentPage.value,
+      limit: pageSize,
+      search: searchQuery.value || undefined
+    })
+    contacts.value = data
+    totalPages.value = meta.totalPages || 1
+    totalItems.value = meta.total
   } catch (error) {
     console.error('Erro ao carregar contatos:', error)
     contacts.value = []
     totalPages.value = 1
+    totalItems.value = 0
   } finally {
     loading.value = false
   }
@@ -401,6 +410,7 @@ const importCSV = async () => {
 }
 
 const changePage = async (page: number) => {
+  if (page < 1 || page > totalPages.value) return
   currentPage.value = page
   await loadContacts()
 }

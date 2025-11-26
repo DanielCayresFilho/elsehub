@@ -10,7 +10,8 @@
 
     <div class="card">
       <div v-if="loading" class="loading"></div>
-      <table v-else class="data-table">
+      <template v-else>
+        <table class="data-table" v-if="users.length">
         <thead>
           <tr>
             <th>Nome</th>
@@ -38,6 +39,26 @@
           </tr>
         </tbody>
       </table>
+        <div v-else class="empty-state">
+          <i class="fas fa-users-slash"></i>
+          <p>Nenhum usuário encontrado</p>
+        </div>
+        <div v-if="users.length && pagination.totalPages > 1" class="pagination">
+          <div class="page-info">
+            Página {{ pagination.page }} de {{ pagination.totalPages }} • {{ pagination.total }} usuários
+          </div>
+          <div class="page-actions">
+            <button class="btn-secondary btn-sm" :disabled="pagination.page === 1" @click="changePage(pagination.page - 1)">
+              <i class="fas fa-chevron-left"></i>
+              Anterior
+            </button>
+            <button class="btn-secondary btn-sm" :disabled="pagination.page === pagination.totalPages" @click="changePage(pagination.page + 1)">
+              Próxima
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <div v-if="showModal" class="modal-overlay" @click="showModal = false">
@@ -89,6 +110,12 @@ import { userService } from '@/services/user.service'
 const users = ref<User[]>([])
 const loading = ref(false)
 const showModal = ref(false)
+const pagination = ref({
+  page: 1,
+  limit: 25,
+  totalPages: 1,
+  total: 0
+})
 const form = ref({
   name: '',
   email: '',
@@ -99,13 +126,29 @@ const form = ref({
 const loadUsers = async () => {
   loading.value = true
   try {
-    users.value = await userService.getUsers(1, 100)
+    const { data, meta } = await userService.getUsers({
+      page: pagination.value.page,
+      limit: pagination.value.limit
+    })
+    users.value = data
+    pagination.value = {
+      ...pagination.value,
+      total: meta.total,
+      totalPages: meta.totalPages || 1
+    }
   } catch (error) {
     console.error('Erro ao carregar usuários:', error)
     users.value = []
+    pagination.value = { ...pagination.value, total: 0, totalPages: 1 }
   } finally {
     loading.value = false
   }
+}
+
+const changePage = async (page: number) => {
+  if (page < 1 || page > pagination.value.totalPages) return
+  pagination.value.page = page
+  await loadUsers()
 }
 
 const createUser = async () => {
@@ -304,6 +347,43 @@ onMounted(() => {
   input,
   select {
     @include input-base;
+  }
+}
+.empty-state {
+  @include flex-center;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-xl;
+  color: $text-secondary-light;
+
+  i {
+    font-size: 2rem;
+  }
+}
+
+.pagination {
+  @include flex-between;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding: $spacing-lg $spacing-xl;
+  border-top: 1px solid $border-light;
+
+  .dark & {
+    border-color: $border-dark;
+  }
+
+  .page-info {
+    font-size: 0.875rem;
+    color: $text-secondary-light;
+
+    .dark & {
+      color: $text-secondary-dark;
+    }
+  }
+
+  .page-actions {
+    display: flex;
+    gap: $spacing-sm;
   }
 }
 </style>

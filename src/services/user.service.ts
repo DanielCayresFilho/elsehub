@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { User } from '@/types'
+import type { PaginatedResponse, User } from '@/types'
 import { UserRole } from '@/types'
 
 interface CreateUserRequest {
@@ -25,17 +25,26 @@ interface ToggleOnlineRequest {
 export const userService = {
   /**
    * GET /api/users
-   * Lista todos os usuários com paginação
-   * Backend retorna array direto conforme documentação
+   * Lista todos os usuários com paginação (formato { data, meta } conforme backend)
    */
-  async getUsers(page = 1, limit = 25): Promise<User[]> {
-    const { data } = await api.get<User[]>('/users', {
+  async getUsers(params: { page?: number; limit?: number; search?: string } = {}): Promise<PaginatedResponse<User>> {
+    const { page = 1, limit = 25, search } = params
+    const { data } = await api.get<PaginatedResponse<User>>('/users', {
       params: {
         page,
-        limit
+        limit,
+        ...(search ? { search } : {})
       }
     })
-    return data || []
+    return {
+      data: data?.data ?? [],
+      meta: data?.meta ?? {
+        total: data?.data?.length ?? 0,
+        page,
+        limit,
+        totalPages: 1
+      }
+    }
   },
 
   /**

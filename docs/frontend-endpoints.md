@@ -35,9 +35,9 @@ Todos os caminhos listados abaixo já incluem o prefixo `/api` quando aplicável
 ## Usuários
 
 - **GET `/users`**  
-  - Serviço: `userService.getUsers`.  
-  - Tela: `src/views/users/UsersView.vue` (listagem, toggle de ativos).  
-  - Teste: acessar `/usuarios`, verificar paginação (parâmetros `page`, `limit`).
+  - Serviço: `userService.getUsers` agora normaliza o `PaginatedResponse<User>` ({ data, meta }) devolvido pelo backend.  
+  - Tela: `src/views/users/UsersView.vue` consome `meta.total`, `meta.totalPages` para navegar entre páginas (botões Anterior/Próxima).  
+  - Teste: acessar `/usuarios`, trocar de página via navegação inferior e validar que a query `page/limit` dispara no Network.
 
 - **GET `/users/me`**  
   - Serviço disponível (`userService.getMe`), porém **não chamado** atualmente.  
@@ -55,9 +55,9 @@ Todos os caminhos listados abaixo já incluem o prefixo `/api` quando aplicável
 ## Contatos
 
 - **GET `/contacts`**  
-  - Serviço: `contactService.getContacts`.  
-  - Telas: `src/views/contacts/ContactsView.vue` (listagem, busca, paginação) e modal “Nova Mensagem” em `ConversationsView`.  
-  - Teste: acessar `/contatos`, usar barra de busca; também abrir modal e verificar dropdown populado.
+  - Serviço: `contactService.getContacts` segue o contrato `{ data, meta }` (meta com `total`, `totalPages`).  
+  - Telas: `src/views/contacts/ContactsView.vue` (listagem, busca, paginação com contagem total) e modal “Nova Mensagem” em `ConversationsView` (dropdown alimentado com `response.data`).  
+  - Teste: acessar `/contatos`, aplicar busca, navegar entre páginas e conferir contagem “Página X de Y • N contatos”.
 
 - **POST `/contacts`**  
   - Serviço: `contactService.createContact`.  
@@ -125,6 +125,29 @@ Todos os caminhos listados abaixo já incluem o prefixo `/api` quando aplicável
   - Serviço: `campaignService.getCampaign`.  
   - Tela: `CampaignDetailsView`.  
   - Teste: abrir `/campanhas/:id`, verificar estatísticas e ações (upload CSV, iniciar, pausar, retomar).
+
+## Conversas & Mensagens
+
+- **GET `/conversations`**  
+  - Serviço: `conversationService.getConversations` (aceita filtros `{ page, limit, status, search, operatorId, serviceInstanceId }` e retorna `{ data, meta }`).  
+  - Uso: `conversation.store.ts` (lista lateral da `ConversationsView`) e `DashboardView` (cartão “Conversas Recentes”).  
+  - Teste: abrir `/conversas`, confirmar que o carregamento inicial chama `/conversations?page=1&limit=100&status=OPEN`; alterar filtros na UI (quando adicionados) deve refletir parâmetros extras.  
+  - Observação: como o backend pagina automaticamente, o store mantém apenas `data` enriquecida; `meta` fica disponível para futuras funcionalidades (scroll infinito, badges de total).
+
+- **GET `/conversations/:id`**  
+  - Serviço: `conversationService.getConversation`.  
+  - Uso: `conversation.store.selectConversation` recupera detalhes completos + mensagens embutidas sempre que o usuário abre um chat específico.  
+  - Teste: selecionar uma conversa e validar que os dados (contact/operator/instância) batem com a resposta de rede.
+
+- **GET `/messages/conversation/:conversationId`**  
+  - Serviço: `messageService.getMessages` também normaliza `{ data, meta }` e aceita `page/limit`.  
+  - Uso: `conversation.store` e o polling em `ConversationsView` (fallback quando WebSocket não entrega). Ambos comparam `response.data.length` para decidir se há novas mensagens.  
+  - Teste: com o chat aberto, enviar/receber mensagens e observar o polling chamando `/messages/conversation/{id}?page=1&limit=100`.
+
+- **POST `/messages/send`**  
+  - Serviço: `messageService.sendMessage`.  
+  - Uso: input principal em `ConversationsView` e fluxo de “Nova Mensagem” (cria conversa, depois envia).  
+  - Teste: enviar mensagem manual pela UI; payload deve conter `conversationId`, `content`, `via: 'CHAT_MANUAL'`.
 
 ## Relatórios
 

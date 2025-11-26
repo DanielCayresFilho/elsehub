@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Message } from '@/types'
+import type { Message, PaginatedResponse } from '@/types'
 
 interface SendMessageRequest {
   conversationId: string
@@ -24,17 +24,25 @@ export const messageService = {
 
   /**
    * GET /api/messages/conversation/:conversationId
-   * Lista mensagens de uma conversa
-   * Conforme documentação: retorna array direto, não paginado
+   * Lista mensagens de uma conversa (formato { data, meta })
    */
-  async getMessages(conversationId: string, page = 1, limit = 100): Promise<Message[]> {
-    const { data } = await api.get<Message[]>(`/messages/conversation/${conversationId}`, {
+  async getMessages(conversationId: string, params: { page?: number; limit?: number } = {}): Promise<PaginatedResponse<Message>> {
+    const { page = 1, limit = 100 } = params
+    const { data } = await api.get<PaginatedResponse<Message>>(`/messages/conversation/${conversationId}`, {
       params: {
         page,
         limit
       }
     })
-    return data
+    return {
+      data: data?.data ?? [],
+      meta: data?.meta ?? {
+        total: data?.data?.length ?? 0,
+        page,
+        limit,
+        totalPages: 1
+      }
+    }
   },
 
   /**

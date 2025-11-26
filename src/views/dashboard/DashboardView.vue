@@ -206,8 +206,12 @@ const loadDashboardData = async () => {
   loading.value = true
   try {
     // Carregar conversas recentes
-    const conversations = await conversationService.getConversations(1, 10, ConversationStatus.OPEN)
-    recentConversations.value = conversations.slice(0, 5)
+    const conversations = await conversationService.getConversations({
+      page: 1,
+      limit: 10,
+      status: ConversationStatus.OPEN
+    })
+    recentConversations.value = conversations.data.slice(0, 5)
 
     // Carregar estatísticas
     const statistics = await reportService.getStatistics()

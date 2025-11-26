@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Contact, CreateContactRequest } from '@/types'
+import type { Contact, CreateContactRequest, PaginatedResponse } from '@/types'
 
 interface ImportCSVResponse {
   success: boolean
@@ -15,18 +15,26 @@ interface ImportCSVResponse {
 export const contactService = {
   /**
    * GET /api/contacts
-   * Lista contatos com filtros e paginação
-   * Backend retorna array direto conforme documentação
+   * Lista contatos com filtros e paginação (formato { data, meta })
    */
-  async getContacts(page = 1, limit = 25, search?: string): Promise<Contact[]> {
-    const { data } = await api.get<Contact[]>('/contacts', {
+  async getContacts(params: { page?: number; limit?: number; search?: string } = {}): Promise<PaginatedResponse<Contact>> {
+    const { page = 1, limit = 25, search } = params
+    const { data } = await api.get<PaginatedResponse<Contact>>('/contacts', {
       params: {
         page,
         limit,
-        ...(search && { search })
+        ...(search ? { search } : {})
       }
     })
-    return data || []
+    return {
+      data: data?.data ?? [],
+      meta: data?.meta ?? {
+        total: data?.data?.length ?? 0,
+        page,
+        limit,
+        totalPages: 1
+      }
+    }
   },
 
   /**

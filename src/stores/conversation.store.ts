@@ -159,8 +159,12 @@ export const useConversationStore = defineStore('conversation', () => {
   async function loadConversations() {
     loading.value = true
     try {
-      const response = await conversationService.getConversations(1, 100, ConversationStatus.OPEN)
-      conversations.value = response.map(conv => enrichConversation(conv))
+      const response = await conversationService.getConversations({
+        page: 1,
+        limit: 100,
+        status: ConversationStatus.OPEN
+      })
+      conversations.value = response.data.map(conv => enrichConversation(conv))
       sortConversations()
     } catch (error) {
       console.error('Erro ao carregar conversas:', error)
@@ -189,9 +193,9 @@ export const useConversationStore = defineStore('conversation', () => {
 
       // Carrega mensagens se não for a mesma conversa ou se não houver mensagens
       if (!isSameConversation || messages.value.length === 0) {
-        const conversationMessages = await messageService.getMessages(conversationId, 1, 100)
-        messages.value = conversationMessages.length > 0 
-          ? conversationMessages 
+        const conversationMessages = await messageService.getMessages(conversationId, { page: 1, limit: 100 })
+        messages.value = conversationMessages.data.length > 0 
+          ? conversationMessages.data 
           : (enriched.messages || [])
       }
 
