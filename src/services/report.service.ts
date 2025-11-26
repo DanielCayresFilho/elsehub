@@ -11,13 +11,23 @@ interface ReportFilters {
 
 interface StatisticsResponse {
   totalConversations: number
-  openConversations: number
-  closedConversations: number
+  avgDurationSeconds: number
+  avgResponseTimeSeconds: number
+  responseRate: number
+  tabulationStats: Array<{
+    tabulationId: string
+    tabulationName: string
+    count: number
+  }>
+}
+
+interface OperatorPerformanceResponse {
+  operatorId: string
+  operatorName: string
+  totalConversations: number
   totalMessages: number
-  inboundMessages: number
-  outboundMessages: number
+  avgDuration: number
   avgResponseTime: number
-  avgConversationDuration: number
 }
 
 export const reportService = {
@@ -61,8 +71,8 @@ export const reportService = {
    * Retorna performance de operadores
    * Retorna array direto, não paginado
    */
-  async getOperatorPerformance(filters: ReportFilters = {}): Promise<OperatorPerformance[]> {
-    const { data } = await api.get<OperatorPerformance[]>('/reports/operator-performance', {
+  async getOperatorPerformance(filters: ReportFilters = {}): Promise<OperatorPerformanceResponse[]> {
+    const { data } = await api.get<OperatorPerformanceResponse[]>('/reports/operator-performance', {
       params: filters
     })
     return data

@@ -71,8 +71,8 @@
         <p class="stat-value">{{ stats.responseRate }}%</p>
       </div>
       <div class="stat-card card">
-        <h3>Tempo Médio</h3>
-        <p class="stat-value">{{ formatTime(stats.averageResponseTime) }}</p>
+        <h3>Tempo Médio de Resposta</h3>
+        <p class="stat-value">{{ formatTime(stats.avgResponseTimeSeconds) }}</p>
       </div>
     </div>
 
@@ -92,7 +92,7 @@
             <td>{{ perf.operatorName }}</td>
             <td>{{ perf.totalConversations }}</td>
             <td>{{ perf.totalMessages }}</td>
-            <td>{{ formatTime(perf.averageResponseTime) }}</td>
+            <td>{{ formatTime(perf.avgResponseTime) }}</td>
           </tr>
         </tbody>
       </table>
@@ -102,21 +102,25 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { Statistics, OperatorPerformance } from '@/types'
 import { reportService } from '@/services/report.service'
 import { downloadCsv, generateCsvFilename } from '@/utils/downloadCsv'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/errorHandler'
 
-const stats = ref<Statistics>({
+const stats = ref({
   totalConversations: 0,
-  activeConversations: 0,
-  closedConversations: 0,
-  totalMessages: 0,
-  averageResponseTime: 0,
+  avgDurationSeconds: 0,
+  avgResponseTimeSeconds: 0,
   responseRate: 0
 })
-const performance = ref<OperatorPerformance[]>([])
+const performance = ref<Array<{
+  operatorId: string
+  operatorName: string
+  totalConversations: number
+  totalMessages: number
+  avgDuration: number
+  avgResponseTime: number
+}>>([])
 const loading = ref(false)
 const exporting = ref(false)
 const filters = ref({ startDate: '', endDate: '' })
@@ -132,24 +136,18 @@ const loadReports = async () => {
     ])
 
     stats.value = {
-      totalConversations: statisticsData.totalConversations,
-      activeConversations: statisticsData.openConversations,
-      closedConversations: statisticsData.closedConversations,
-      totalMessages: statisticsData.totalMessages,
-      averageResponseTime: statisticsData.avgResponseTime,
-      responseRate: statisticsData.avgResponseTime > 0 
-        ? Math.round((statisticsData.avgResponseTime / 120) * 100) 
-        : 0
+      totalConversations: statisticsData.totalConversations || 0,
+      avgDurationSeconds: statisticsData.avgDurationSeconds || 0,
+      avgResponseTimeSeconds: statisticsData.avgResponseTimeSeconds || 0,
+      responseRate: statisticsData.responseRate || 0
     }
-    performance.value = performanceData
+    performance.value = performanceData || []
   } catch (error) {
     logger.error('Erro ao carregar relatórios', error)
     stats.value = {
       totalConversations: 0,
-      activeConversations: 0,
-      closedConversations: 0,
-      totalMessages: 0,
-      averageResponseTime: 0,
+      avgDurationSeconds: 0,
+      avgResponseTimeSeconds: 0,
       responseRate: 0
     }
     performance.value = []
@@ -223,10 +221,11 @@ const exportMessages = async () => {
   }
 }
 
-const formatTime = (seconds: number) => {
-  if (seconds < 60) return `${seconds}s`
+const formatTime = (seconds: number | null | undefined) => {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '0s'
+  if (seconds < 60) return `${Math.round(seconds)}s`
   const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
+  const secs = Math.round(seconds % 60)
   return `${minutes}m ${secs}s`
 }
 

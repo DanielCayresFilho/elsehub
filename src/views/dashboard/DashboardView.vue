@@ -87,18 +87,18 @@
               @click="openConversation(conversation.id)"
             >
               <div class="conversation-avatar">
-                {{ getInitials(conversation.contact?.name || 'Desconhecido') }}
+                {{ getInitials(conversation.contactName || 'Desconhecido') }}
               </div>
               <div class="conversation-info">
                 <div class="conversation-header">
-                  <h4>{{ conversation.contact?.name || 'Desconhecido' }}</h4>
+                  <h4>{{ conversation.contactName || 'Desconhecido' }}</h4>
                   <span class="conversation-time">{{ formatDate(conversation.lastMessageAt) }}</span>
                 </div>
                 <p class="conversation-message">
-                  {{ conversation.lastMessagePreview || conversation.messages?.[conversation.messages.length - 1]?.content || 'Sem mensagens' }}
+                  {{ conversation.lastMessage || 'Sem mensagens' }}
                 </p>
               </div>
-              <span :class="['status-indicator', conversation.status.toLowerCase()]"></span>
+              <span class="status-indicator open"></span>
             </div>
           </div>
           
@@ -154,7 +154,7 @@
             </div>
             <div class="metric">
               <div class="metric-header">
-                <span>Tempo Médio</span>
+                <span>Tempo Médio de Resposta</span>
                 <span class="metric-value">{{ formatTime(stats.averageResponseTime) }}</span>
               </div>
               <div class="progress-bar">
@@ -164,10 +164,10 @@
             <div class="metric">
               <div class="metric-header">
                 <span>Conversas Fechadas</span>
-                <span class="metric-value">{{ stats.closedConversations }}</span>
+                <span class="metric-value">{{ getTodayClosedConversations() }}</span>
               </div>
               <div class="progress-bar">
-                <div class="progress-fill purple" :style="{ width: stats.totalConversations > 0 ? `${(stats.closedConversations / stats.totalConversations) * 100}%` : '0%' }"></div>
+                <div class="progress-fill purple" :style="{ width: getTodayClosedConversationsPercentage() + '%' }"></div>
               </div>
             </div>
           </div>
@@ -181,24 +181,20 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
-import { conversationService } from '@/services/conversation.service'
-import { reportService } from '@/services/report.service'
+import { dashboardService, type RecentConversation, type WeeklyPerformance } from '@/services/dashboard.service'
 import { logger } from '@/utils/logger'
-import type { Conversation, Statistics } from '@/types'
-import { ConversationStatus } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(true)
-const recentConversations = ref<Conversation[]>([])
-const stats = ref<Statistics>({
-  totalConversations: 0,
+const recentConversations = ref<RecentConversation[]>([])
+const weeklyPerformance = ref<WeeklyPerformance[]>([])
+const stats = ref({
   activeConversations: 0,
-  closedConversations: 0,
   totalMessages: 0,
-  averageResponseTime: 0,
-  responseRate: 0
+  responseRate: 0,
+  averageResponseTime: 0
 })
 
 const isOperator = computed(() => authStore.isOperator)
@@ -206,26 +202,26 @@ const isOperator = computed(() => authStore.isOperator)
 const loadDashboardData = async () => {
   loading.value = true
   try {
-    // Carregar conversas recentes
-    const conversations = await conversationService.getConversations({
-      page: 1,
-      limit: 10,
-      status: ConversationStatus.OPEN
-    })
-    recentConversations.value = conversations.data.slice(0, 5)
+    // Carregar todos os dados do dashboard em paralelo
+    const [statsData, recentData, weeklyData] = await Promise.all([
+      dashboardService.getStats(),
+      dashboardService.getRecentConversations(),
+      dashboardService.getWeeklyPerformance()
+    ])
 
-    // Carregar estatísticas
-    const statistics = await reportService.getStatistics()
+    // Atualizar estatísticas dos cards
     stats.value = {
-      totalConversations: statistics.totalConversations || 0,
-      activeConversations: statistics.openConversations || 0,
-      closedConversations: statistics.closedConversations || 0,
-      totalMessages: statistics.totalMessages || 0,
-      averageResponseTime: statistics.avgResponseTime || 0,
-      responseRate: statistics.totalConversations > 0 && statistics.closedConversations > 0
-        ? Math.round((statistics.closedConversations / statistics.totalConversations) * 100)
-        : 0
+      activeConversations: statsData.activeConversations || 0,
+      totalMessages: statsData.totalMessages || 0,
+      responseRate: statsData.responseRate || 0,
+      averageResponseTime: statsData.averageResponseTime || 0
     }
+
+    // Atualizar conversas recentes
+    recentConversations.value = recentData || []
+
+    // Atualizar desempenho semanal
+    weeklyPerformance.value = weeklyData || []
   } catch (error) {
     logger.error('Erro ao carregar dados do dashboard', error)
     // Manter valores padrão (já inicializados como 0)
@@ -241,12 +237,14 @@ const getInitials = (name: string) => {
     : names[0].substring(0, 2).toUpperCase()
 }
 
-const formatDate = (date: string) => {
+const formatDate = (date: string | null | undefined) => {
+  if (!date) return 'Agora'
   const d = new Date(date)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
   const minutes = Math.floor(diff / 60000)
   
+  if (minutes < 1) return 'Agora'
   if (minutes < 60) return `${minutes}m atrás`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h atrás`
@@ -254,10 +252,25 @@ const formatDate = (date: string) => {
   return `${days}d atrás`
 }
 
-const formatTime = (seconds: number) => {
-  if (seconds < 60) return `${seconds}s`
+const getTodayClosedConversations = () => {
+  const today = new Date().toISOString().split('T')[0]
+  const todayData = weeklyPerformance.value.find(w => w.date === today)
+  return todayData?.closedConversations || 0
+}
+
+const getTodayClosedConversationsPercentage = () => {
+  const closed = getTodayClosedConversations()
+  const active = stats.value.activeConversations
+  const total = active + closed
+  if (total === 0) return 0
+  return Math.round((closed / total) * 100)
+}
+
+const formatTime = (seconds: number | null | undefined) => {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '0s'
+  if (seconds < 60) return `${Math.round(seconds)}s`
   const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
+  const secs = Math.round(seconds % 60)
   return `${minutes}m ${secs}s`
 }
 
