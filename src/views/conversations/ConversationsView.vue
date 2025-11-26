@@ -536,10 +536,35 @@ const sendMessage = async () => {
   
   // Verificar se a conversa está aberta antes de enviar
   const conversation = activeConversation.value
-  if (conversation && conversation.status !== ConversationStatus.OPEN) {
+  if (!conversation) {
+    logger.error('Conversa não encontrada ao tentar enviar mensagem')
+    alert('Conversa não encontrada. Recarregue a página e tente novamente.')
+    return
+  }
+  
+  if (conversation.status !== ConversationStatus.OPEN) {
     alert('Não é possível enviar mensagens para uma conversa fechada.')
     return
   }
+  
+  // Validar se a conversa tem serviceInstanceId (requerido pelo backend)
+  if (!conversation.serviceInstanceId) {
+    logger.error('❌ Conversa sem serviceInstanceId!', {
+      conversationId: conversation.id,
+      conversation: conversation
+    })
+    alert('Erro: Conversa sem instância vinculada. Recarregue a página e tente novamente.')
+    return
+  }
+  
+  // Logs detalhados para debug (apenas em desenvolvimento)
+  logger.log('📤 Enviando mensagem:', {
+    conversationId: conversation.id,
+    serviceInstanceId: conversation.serviceInstanceId,
+    serviceInstanceName: conversation.serviceInstanceName,
+    status: conversation.status,
+    messageLength: newMessage.value.trim().length
+  })
   
   // Para indicador de digitação
   if (typingTimeout.value) {
@@ -568,12 +593,15 @@ const sendMessage = async () => {
     
     // NÃO recarrega a conversa - a mensagem já foi adicionada e o WebSocket vai atualizar
   } catch (error: any) {
-    logger.error('Erro ao enviar mensagem', error)
-    logger.error('Detalhes do erro:', {
+    logger.error('❌ Erro ao enviar mensagem', error)
+    logger.error('📋 Detalhes do erro:', {
       status: error?.response?.status,
       data: error?.response?.data,
       conversationId: activeConversationId.value,
-      conversationStatus: conversation?.status
+      conversationStatus: conversation?.status,
+      serviceInstanceId: conversation?.serviceInstanceId,
+      serviceInstanceName: conversation?.serviceInstanceName,
+      conversation: conversation
     })
     
     // Restaurar mensagem em caso de erro

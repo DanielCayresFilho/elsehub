@@ -180,6 +180,15 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       // Busca a conversa completa com mensagens
       const conversation = await conversationService.getConversation(conversationId)
+      
+      // Validar se a conversa tem serviceInstanceId (crítico para envio de mensagens)
+      if (!conversation.serviceInstanceId) {
+        logger.warn('⚠️ Conversa sem serviceInstanceId ao selecionar:', {
+          conversationId: conversation.id,
+          conversation: conversation
+        })
+      }
+      
       const enriched = enrichConversation(conversation)
       activeConversation.value = enriched
 
