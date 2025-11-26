@@ -274,6 +274,14 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function setupWebSocketListeners() {
+    // Escuta novas conversas (conforme documentação: conversation:new)
+    // Payload: Conversation com serviceInstanceId e serviceInstanceName incluídos
+    wsService.on('conversation:new', (conversation: Conversation) => {
+      logger.log('[WebSocket] Nova conversa recebida:', conversation)
+      // Adiciona a conversa à lista (já vem com serviceInstanceId e serviceInstanceName)
+      addConversation(conversation)
+    })
+
     // Escuta evento new_message conforme documentação do backend
     // Payload: { conversationId: string, message: Message }
     wsService.on('new_message', (data: { conversationId: string; message: Message }) => {

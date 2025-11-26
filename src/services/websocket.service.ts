@@ -62,6 +62,12 @@ class WebSocketService {
         this.emit('new_message', { conversationId: message.conversationId, message })
       })
 
+      // Escuta novas conversas (conforme documentação: conversation:new)
+      this.socket.on('conversation:new', (conversation: Conversation) => {
+        logger.log('[WebSocket] Nova conversa criada:', conversation)
+        this.emit('conversation:new', conversation)
+      })
+
       // Escuta atualizações de conversas (conforme documentação: conversation:updated)
       this.socket.on('conversation:updated', (conversation: Conversation) => {
         logger.log('[WebSocket] Conversa atualizada:', conversation)
