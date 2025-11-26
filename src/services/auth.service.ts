@@ -20,7 +20,7 @@ const persistUser = (user: User) => {
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const { data } = await authHttp.post('/api/auth/login', credentials)
+    const { data } = await authHttp.post('/auth/login', credentials)
     const response = mapAuthApiResponse(data)
     tokenService.persistSession(response)
     persistUser(response.user)
@@ -32,7 +32,7 @@ export const authService = {
     if (!tokenToUse) {
       throw new Error('Refresh token indisponível')
     }
-    const { data } = await authHttp.post('/api/auth/refresh', { refreshToken: tokenToUse })
+    const { data } = await authHttp.post('/auth/refresh', { refreshToken: tokenToUse })
     const response = mapAuthApiResponse(data)
     tokenService.persistSession(response)
     persistUser(response.user)
@@ -40,7 +40,7 @@ export const authService = {
   },
 
   async getProfile(): Promise<User> {
-    const { data } = await api.get<User>('/api/auth/profile')
+    const { data } = await api.get<User>('/auth/profile')
     persistUser(data)
     return data
   },

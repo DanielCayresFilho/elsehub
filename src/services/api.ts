@@ -51,7 +51,7 @@ const refreshAccessToken = async (): Promise<string> => {
   if (!refreshToken) {
     throw new Error('Refresh token ausente')
   }
-  const { data } = await refreshClient.post('/api/auth/refresh', { refreshToken })
+  const { data } = await refreshClient.post('/auth/refresh', { refreshToken })
   const response = mapAuthApiResponse(data)
   tokenService.persistSession(response)
   persistUser(response.user)
