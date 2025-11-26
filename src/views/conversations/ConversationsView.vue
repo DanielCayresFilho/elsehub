@@ -389,6 +389,7 @@ import { wsService } from '@/services/websocket.service'
 import { getErrorMessage, ErrorMessages, shouldRedirectToLogin } from '@/utils/errorHandler'
 import { logger } from '@/utils/logger'
 import type { User, Tabulation, ServiceInstance, Contact, Message, Conversation } from '@/types'
+import { ConversationStatus } from '@/types'
 
 const conversationStore = useConversationStore()
 
@@ -533,6 +534,13 @@ const handleTyping = () => {
 const sendMessage = async () => {
   if (!newMessage.value.trim() || !activeConversationId.value) return
   
+  // Verificar se a conversa está aberta antes de enviar
+  const conversation = activeConversation.value
+  if (conversation && conversation.status !== ConversationStatus.OPEN) {
+    alert('Não é possível enviar mensagens para uma conversa fechada.')
+    return
+  }
+  
   // Para indicador de digitação
   if (typingTimeout.value) {
     clearTimeout(typingTimeout.value)
@@ -561,6 +569,13 @@ const sendMessage = async () => {
     // NÃO recarrega a conversa - a mensagem já foi adicionada e o WebSocket vai atualizar
   } catch (error: any) {
     logger.error('Erro ao enviar mensagem', error)
+    logger.error('Detalhes do erro:', {
+      status: error?.response?.status,
+      data: error?.response?.data,
+      conversationId: activeConversationId.value,
+      conversationStatus: conversation?.status
+    })
+    
     // Restaurar mensagem em caso de erro
     newMessage.value = messageContent
     
@@ -569,6 +584,16 @@ const sendMessage = async () => {
     
     if (error?.response?.status === 404) {
       errorMessage = ErrorMessages.send.conversation
+    } else if (error?.response?.status === 400) {
+      // Erro 400 - Bad Request - mostrar mensagem do backend se disponível
+      const backendMessage = error?.response?.data?.message
+      if (backendMessage) {
+        errorMessage = Array.isArray(backendMessage) 
+          ? backendMessage.join(', ')
+          : backendMessage
+      } else {
+        errorMessage = 'Erro ao enviar mensagem. Verifique se a conversa está aberta e a instância está conectada.'
+      }
     } else {
       errorMessage = getErrorMessage(error, ErrorMessages.send.default)
     }
