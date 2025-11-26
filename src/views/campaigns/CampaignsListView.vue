@@ -91,6 +91,7 @@
 import { ref, onMounted } from 'vue'
 import type { Campaign, CampaignStatus } from '@/types'
 import { campaignService } from '@/services/campaign.service'
+import { logger } from '@/utils/logger'
 
 const campaigns = ref<Campaign[]>([])
 const loading = ref(true)
@@ -100,7 +101,7 @@ const loadCampaigns = async () => {
   try {
     campaigns.value = await campaignService.getCampaigns()
   } catch (error) {
-    console.error('Erro ao carregar campanhas:', error)
+    logger.error('Erro ao carregar campanhas', error)
     campaigns.value = []
   } finally {
     loading.value = false
@@ -112,7 +113,7 @@ const startCampaign = async (id: string) => {
     const updated = await campaignService.startCampaign(id)
     await loadCampaigns()
   } catch (error: any) {
-    console.error('Erro ao iniciar campanha:', error)
+    logger.error('Erro ao iniciar campanha', error)
     alert(error.response?.data?.message || error.message || 'Erro ao iniciar campanha')
   }
 }
@@ -122,7 +123,7 @@ const pauseCampaign = async (id: string) => {
     await campaignService.pauseCampaign(id)
     await loadCampaigns()
   } catch (error: any) {
-    console.error('Erro ao pausar campanha:', error)
+    logger.error('Erro ao pausar campanha', error)
     alert(error.response?.data?.message || error.message || 'Erro ao pausar campanha')
   }
 }
@@ -154,8 +155,15 @@ const getStatusClass = (status: CampaignStatus) => {
   return classes[status] || ''
 }
 
-const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('pt-BR')
+const formatDate = (date: string | null | undefined) => {
+  if (!date) return '-'
+  try {
+    const parsedDate = new Date(date)
+    if (isNaN(parsedDate.getTime())) return '-'
+    return parsedDate.toLocaleDateString('pt-BR')
+  } catch (error) {
+    return '-'
+  }
 }
 
 onMounted(() => {

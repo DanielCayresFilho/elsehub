@@ -128,6 +128,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { campaignService } from '@/services/campaign.service'
+import { logger } from '@/utils/logger'
 import type { Campaign } from '@/types'
 
 const route = useRoute()
@@ -141,7 +142,7 @@ const loadCampaign = async () => {
   try {
     campaign.value = await campaignService.getCampaign(route.params.id as string)
   } catch (error) {
-    console.error('Erro ao carregar campanha:', error)
+    logger.error('Erro ao carregar campanha', error)
   } finally {
     loading.value = false
   }
@@ -160,7 +161,7 @@ const handleFileUpload = async (event: Event) => {
     await loadCampaign()
     alert('Contatos carregados com sucesso!')
   } catch (error) {
-    console.error('Erro ao fazer upload:', error)
+    logger.error('Erro ao fazer upload', error)
     alert('Erro ao fazer upload dos contatos')
   }
 }
