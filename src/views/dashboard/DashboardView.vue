@@ -181,7 +181,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { conversationService } from '@/services/conversation.service'
+import { reportService } from '@/services/report.service'
 import type { Conversation, Statistics } from '@/types'
+import { ConversationStatus } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -197,35 +200,30 @@ const stats = ref<Statistics>({
   responseRate: 0
 })
 
-// Remove mock data - all data comes from API
-
 const isOperator = computed(() => authStore.isOperator)
 
-const loadDashboardData = () => {
+const loadDashboardData = async () => {
   loading.value = true
-  recentConversations.value = [
-    {
-      id: 'conv-dashboard-1',
-      contactId: 'contact-demo',
-      contactName: 'Cliente Demo',
-      serviceInstanceId: 'instance-demo',
-      status: 'OPEN',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastMessageAt: new Date().toISOString(),
-      lastMessagePreview: 'Exemplo de conversa em andamento.',
-      lastMessageDirection: 'INBOUND'
-    } as Conversation
-  ]
-  stats.value = {
-    totalConversations: 24,
-    activeConversations: 6,
-    closedConversations: 18,
-    totalMessages: 180,
-    averageResponseTime: 65,
-    responseRate: 92
+  try {
+    // Carregar conversas recentes
+    const conversations = await conversationService.getConversations(1, 10, ConversationStatus.OPEN)
+    recentConversations.value = conversations.slice(0, 5)
+
+    // Carregar estatísticas
+    const statistics = await reportService.getStatistics()
+    stats.value = {
+      totalConversations: statistics.totalConversations,
+      activeConversations: statistics.openConversations,
+      closedConversations: statistics.closedConversations,
+      totalMessages: statistics.totalMessages,
+      averageResponseTime: statistics.avgResponseTime,
+      responseRate: statistics.avgResponseTime > 0 ? Math.round((statistics.avgResponseTime / 120) * 100) : 0
+    }
+  } catch (error) {
+    console.error('Erro ao carregar dados do dashboard:', error)
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
 
 const getInitials = (name: string) => {

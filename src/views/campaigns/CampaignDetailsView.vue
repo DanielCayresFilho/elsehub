@@ -71,7 +71,7 @@
 
         <div class="campaign-actions">
           <button 
-            v-if="campaign.status === 'DRAFT'"
+            v-if="campaign.status === 'PENDING'"
             @click="uploadFile"
             class="btn-primary"
           >
@@ -79,7 +79,7 @@
             Fazer Upload de Contatos
           </button>
           <button 
-            v-if="campaign.status === 'DRAFT' && campaign.totalContacts > 0"
+            v-if="campaign.status === 'PENDING' && campaign.totalContacts > 0"
             @click="startCampaign"
             class="btn-success"
           >
@@ -189,8 +189,7 @@ const resumeCampaign = async () => {
 
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
-    DRAFT: 'Rascunho',
-    SCHEDULED: 'Agendada',
+    PENDING: 'Pendente',
     PROCESSING: 'Processando',
     PAUSED: 'Pausada',
     COMPLETED: 'Concluída',
@@ -233,7 +232,7 @@ onMounted(() => {
   font-size: 0.875rem;
   font-weight: 500;
 
-  &.draft { background: rgba($text-secondary-light, 0.1); color: $text-secondary-light; }
+  &.pending { background: rgba($text-secondary-light, 0.1); color: $text-secondary-light; }
   &.processing { background: rgba($primary-light, 0.1); color: $primary-light; }
   &.paused { background: rgba($warning, 0.1); color: $warning; }
   &.completed { background: rgba($success, 0.1); color: $success; }

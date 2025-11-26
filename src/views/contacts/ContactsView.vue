@@ -236,8 +236,9 @@ Maria Santos,5511988888888,,Cliente Premium</pre>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { Contact, CreateContactRequest } from '@/types'
+import { contactService } from '@/services/contact.service'
 
 const contacts = ref<Contact[]>([])
 const loading = ref(true)
@@ -269,30 +270,29 @@ const formError = ref('')
 const importError = ref('')
 const importSuccess = ref('')
 
-const filteredContacts = computed(() => {
-  if (!searchQuery.value) return contacts.value
-  
-  const query = searchQuery.value.toLowerCase()
-  return contacts.value.filter(contact => 
-    contact.name.toLowerCase().includes(query) ||
-    contact.phone.includes(query) ||
-    contact.cpf?.includes(query)
-  )
+// Busca é feita no backend, então filteredContacts é apenas os contatos carregados
+const filteredContacts = computed(() => contacts.value)
+
+// Watch para recarregar quando searchQuery mudar
+watch(searchQuery, async () => {
+  currentPage.value = 1
+  await loadContacts()
 })
 
-const loadContacts = () => {
+const loadContacts = async () => {
   loading.value = true
-  contacts.value = [
-    {
-      id: 'contact-1',
-      name: 'Carlos Demo',
-      phone: '5511999999999',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
-  totalPages.value = 1
-  loading.value = false
+  try {
+    contacts.value = await contactService.getContacts(currentPage.value, 25, searchQuery.value || undefined)
+    // Como a API retorna array direto, calculamos totalPages baseado no tamanho
+    // Se houver menos que o limite, significa que é a última página
+    totalPages.value = contacts.value.length < 25 ? currentPage.value : currentPage.value + 1
+  } catch (error) {
+    console.error('Erro ao carregar contatos:', error)
+    contacts.value = []
+    totalPages.value = 1
+  } finally {
+    loading.value = false
+  }
 }
 
 const openCreateModal = () => {
@@ -327,31 +327,23 @@ const closeModal = () => {
   formError.value = ''
 }
 
-const saveContact = () => {
+const saveContact = async () => {
   saving.value = true
   formError.value = ''
 
-  if (editingContact.value) {
-    contacts.value = contacts.value.map(contact =>
-      contact.id === editingContact.value?.id
-        ? {
-            ...contact,
-            ...form.value,
-            updatedAt: new Date().toISOString()
-          }
-        : contact
-    )
-  } else {
-    contacts.value.unshift({
-      id: `contact-${Date.now()}`,
-      ...form.value,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    })
+  try {
+    if (editingContact.value) {
+      await contactService.updateContact(editingContact.value.id, form.value)
+    } else {
+      await contactService.createContact(form.value)
+    }
+    closeModal()
+    await loadContacts()
+  } catch (error: any) {
+    formError.value = error.response?.data?.message || error.message || 'Erro ao salvar contato'
+  } finally {
+    saving.value = false
   }
-
-  closeModal()
-  saving.value = false
 }
 
 const confirmDelete = (contact: Contact) => {
@@ -359,14 +351,21 @@ const confirmDelete = (contact: Contact) => {
   showDeleteModal.value = true
 }
 
-const deleteContact = () => {
+const deleteContact = async () => {
   if (!contactToDelete.value) return
 
   deleting.value = true
-  contacts.value = contacts.value.filter(contact => contact.id !== contactToDelete.value?.id)
-  showDeleteModal.value = false
-  contactToDelete.value = null
-  deleting.value = false
+  try {
+    await contactService.deleteContact(contactToDelete.value.id)
+    showDeleteModal.value = false
+    contactToDelete.value = null
+    await loadContacts()
+  } catch (error: any) {
+    console.error('Erro ao deletar contato:', error)
+    importError.value = error.response?.data?.message || error.message || 'Erro ao deletar contato'
+  } finally {
+    deleting.value = false
+  }
 }
 
 const handleFileSelect = (event: Event) => {
@@ -376,23 +375,34 @@ const handleFileSelect = (event: Event) => {
   importSuccess.value = ''
 }
 
-const importCSV = () => {
+const importCSV = async () => {
   if (!selectedFile.value) return
 
   importing.value = true
   importError.value = ''
-  importSuccess.value = `Arquivo ${selectedFile.value.name} processado localmente.`
+  importSuccess.value = ''
 
-  selectedFile.value = null
-  if (fileInput.value) {
-    fileInput.value.value = ''
+  try {
+    const result = await contactService.importCSV(selectedFile.value)
+    importSuccess.value = `Importação concluída: ${result.imported} de ${result.total} contatos importados.`
+    if (result.failed > 0) {
+      importError.value = `${result.failed} contatos falharam na importação.`
+    }
+    selectedFile.value = null
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+    await loadContacts()
+  } catch (error: any) {
+    importError.value = error.response?.data?.message || error.message || 'Erro ao importar arquivo'
+  } finally {
+    importing.value = false
   }
-  importing.value = false
 }
 
-const changePage = (page: number) => {
+const changePage = async (page: number) => {
   currentPage.value = page
-  loadContacts()
+  await loadContacts()
 }
 
 const formatPhone = (phone: string) => {

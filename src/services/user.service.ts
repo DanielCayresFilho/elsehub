@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { User, PaginatedResponse } from '@/types'
+import type { User } from '@/types'
 import { UserRole } from '@/types'
 
 interface CreateUserRequest {
@@ -26,6 +26,7 @@ export const userService = {
   /**
    * GET /api/users
    * Lista todos os usuários com paginação
+   * Backend retorna array direto conforme documentação
    */
   async getUsers(page = 1, limit = 25): Promise<User[]> {
     const { data } = await api.get<User[]>('/users', {
@@ -34,7 +35,7 @@ export const userService = {
         limit
       }
     })
-    return data
+    return data || []
   },
 
   /**

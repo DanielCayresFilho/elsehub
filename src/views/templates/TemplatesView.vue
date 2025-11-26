@@ -40,6 +40,15 @@
               <input type="text" v-model="form.name" required />
             </div>
             <div class="form-group">
+              <label>Instância de Serviço</label>
+              <select v-model="form.serviceInstanceId" required>
+                <option value="">Selecione uma instância</option>
+                <option v-for="instance in serviceInstances" :key="instance.id" :value="instance.id">
+                  {{ instance.name }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
               <label>Mensagem</label>
               <textarea v-model="form.body" rows="5" required></textarea>
               <small>Use {{name}} para variáveis</small>
@@ -58,8 +67,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { Template } from '@/types'
+import { templateService } from '@/services/template.service'
+import { serviceInstanceService } from '@/services/service-instance.service'
+import type { ServiceInstance } from '@/types'
 
 const templates = ref<Template[]>([])
+const serviceInstances = ref<ServiceInstance[]>([])
+const loading = ref(false)
 const showModal = ref(false)
 const editingTemplate = ref<Template | null>(null)
 
@@ -69,23 +83,34 @@ const form = ref({
   serviceInstanceId: ''
 })
 
-const loadTemplates = () => {
-  templates.value = [
-    {
-      id: 'demo-template',
-      name: 'Template demonstração',
-      body: 'Olá {{name}}, esta é uma mensagem estática.',
-      serviceInstanceId: 'stub-instance',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
+const loadTemplates = async () => {
+  loading.value = true
+  try {
+    templates.value = await templateService.getTemplates()
+  } catch (error) {
+    console.error('Erro ao carregar templates:', error)
+    templates.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
-const openCreateModal = () => {
+const loadServiceInstances = async () => {
+  try {
+    serviceInstances.value = await serviceInstanceService.getInstances()
+    // Se não houver serviceInstanceId selecionado e houver instâncias, selecionar a primeira
+    if (!form.value.serviceInstanceId && serviceInstances.value.length > 0) {
+      form.value.serviceInstanceId = serviceInstances.value[0].id
+    }
+  } catch (error) {
+    console.error('Erro ao carregar instâncias:', error)
+  }
+}
+
+const openCreateModal = async () => {
   editingTemplate.value = null
   form.value = { name: '', body: '', serviceInstanceId: '' }
-  form.value.serviceInstanceId = 'stub-instance'
+  await loadServiceInstances()
   showModal.value = true
 }
 
@@ -104,31 +129,40 @@ const closeModal = () => {
   editingTemplate.value = null
 }
 
-const saveTemplate = () => {
-  if (editingTemplate.value) {
-    templates.value = templates.value.map(template =>
-      template.id === editingTemplate.value?.id
-        ? { ...template, ...form.value, updatedAt: new Date().toISOString() }
-        : template
-    )
-  } else {
-    templates.value.unshift({
-      id: `template-${Date.now()}`,
-      ...form.value,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    })
+const saveTemplate = async () => {
+  if (!form.value.serviceInstanceId) {
+    alert('Selecione uma instância de serviço')
+    return
   }
-  closeModal()
+
+  try {
+    if (editingTemplate.value) {
+      await templateService.updateTemplate(editingTemplate.value.id, form.value)
+    } else {
+      await templateService.createTemplate(form.value)
+    }
+    closeModal()
+    await loadTemplates()
+  } catch (error: any) {
+    console.error('Erro ao salvar template:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao salvar template')
+  }
 }
 
-const deleteTemplate = (id: string) => {
+const deleteTemplate = async (id: string) => {
   if (!confirm('Tem certeza que deseja excluir este template?')) return
-  templates.value = templates.value.filter(template => template.id !== id)
+  try {
+    await templateService.deleteTemplate(id)
+    await loadTemplates()
+  } catch (error: any) {
+    console.error('Erro ao deletar template:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao deletar template')
+  }
 }
 
-onMounted(() => {
-  loadTemplates()
+onMounted(async () => {
+  await loadTemplates()
+  await loadServiceInstances()
 })
 </script>
 

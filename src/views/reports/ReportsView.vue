@@ -2,6 +2,8 @@
   <div class="reports-view">
     <h2>Relatórios e Estatísticas</h2>
 
+    <div v-if="loading" class="loading"></div>
+
     <div class="filters-card card">
       <div class="filters-grid">
         <div class="form-group">
@@ -58,6 +60,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { Statistics, OperatorPerformance } from '@/types'
+import { reportService } from '@/services/report.service'
 
 const stats = ref<Statistics>({
   totalConversations: 0,
@@ -68,27 +71,52 @@ const stats = ref<Statistics>({
   responseRate: 0
 })
 const performance = ref<OperatorPerformance[]>([])
+const loading = ref(false)
 const filters = ref({ startDate: '', endDate: '' })
 
-const loadReports = () => {
-  stats.value = {
-    totalConversations: 42,
-    activeConversations: 5,
-    closedConversations: 37,
-    totalMessages: 320,
-    averageResponseTime: 90,
-    responseRate: 87
-  }
-  performance.value = [
-    {
-      operatorId: 'operator-1',
-      operatorName: 'João Silva',
-      totalConversations: 15,
-      totalMessages: 120,
-      averageResponseTime: 80,
-      satisfaction: 95
+const loadReports = async () => {
+  loading.value = true
+  try {
+    const apiFilters: any = {}
+    if (filters.value.startDate) {
+      apiFilters.startDate = new Date(filters.value.startDate).toISOString()
     }
-  ]
+    if (filters.value.endDate) {
+      const endDate = new Date(filters.value.endDate)
+      endDate.setHours(23, 59, 59, 999)
+      apiFilters.endDate = endDate.toISOString()
+    }
+
+    const [statisticsData, performanceData] = await Promise.all([
+      reportService.getStatistics(apiFilters),
+      reportService.getOperatorPerformance(apiFilters)
+    ])
+
+    stats.value = {
+      totalConversations: statisticsData.totalConversations,
+      activeConversations: statisticsData.openConversations,
+      closedConversations: statisticsData.closedConversations,
+      totalMessages: statisticsData.totalMessages,
+      averageResponseTime: statisticsData.avgResponseTime,
+      responseRate: statisticsData.avgResponseTime > 0 
+        ? Math.round((statisticsData.avgResponseTime / 120) * 100) 
+        : 0
+    }
+    performance.value = performanceData
+  } catch (error) {
+    console.error('Erro ao carregar relatórios:', error)
+    stats.value = {
+      totalConversations: 0,
+      activeConversations: 0,
+      closedConversations: 0,
+      totalMessages: 0,
+      averageResponseTime: 0,
+      responseRate: 0
+    }
+    performance.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 const formatTime = (seconds: number) => {

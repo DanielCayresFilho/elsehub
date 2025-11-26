@@ -4,7 +4,7 @@ import type { Message } from '@/types'
 interface SendMessageRequest {
   conversationId: string
   content: string
-  via?: 'CHAT_MANUAL' | 'CAMPAIGN'
+  via?: 'INBOUND' | 'CAMPAIGN' | 'CHAT_MANUAL'
 }
 
 export const messageService = {
@@ -13,7 +13,7 @@ export const messageService = {
    * Envia uma mensagem para uma conversa
    * Conforme documentação: POST /api/messages/send
    */
-  async sendMessage(conversationId: string, content: string, via: 'CHAT_MANUAL' | 'CAMPAIGN' = 'CHAT_MANUAL'): Promise<Message> {
+  async sendMessage(conversationId: string, content: string, via: 'INBOUND' | 'CAMPAIGN' | 'CHAT_MANUAL' = 'CHAT_MANUAL'): Promise<Message> {
     const { data } = await api.post<Message>('/messages/send', {
       conversationId,
       content,

@@ -97,13 +97,10 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  function ensureConversationPresence(conversationId: string): Conversation {
+  function ensureConversationPresence(conversationId: string): Conversation | null {
     const existing = conversations.value.find(c => c.id === conversationId)
     if (existing) return existing
-
-    const placeholder = createDemoConversation(conversationId)
-    addConversation(placeholder)
-    return placeholder
+    return null
   }
   
   function updateConversationMetadata(conversationId: string, message?: Message) {
@@ -163,7 +160,7 @@ export const useConversationStore = defineStore('conversation', () => {
     loading.value = true
     try {
       const response = await conversationService.getConversations(1, 100, ConversationStatus.OPEN)
-      conversations.value = response.data.map(conv => enrichConversation(conv))
+      conversations.value = response.map(conv => enrichConversation(conv))
       sortConversations()
     } catch (error) {
       console.error('Erro ao carregar conversas:', error)
@@ -215,10 +212,8 @@ export const useConversationStore = defineStore('conversation', () => {
       wsService.joinRoom(conversationId)
     } catch (error) {
       console.error('Erro ao selecionar conversa:', error)
-      // Fallback para conversa stub em caso de erro
-      const baseConversation = ensureConversationPresence(conversationId)
-      const enriched = enrichConversation(baseConversation)
-      activeConversation.value = enriched
+      // Não usar fallback mockado - deixar erro propagar ou mostrar mensagem ao usuário
+      throw error
     }
   }
 
@@ -313,7 +308,10 @@ export const useConversationStore = defineStore('conversation', () => {
       console.log('Conversa ativa:', activeConversation.value?.id)
       console.log('Conversa da mensagem:', conversationId)
       console.log('É da conversa ativa?', activeConversation.value?.id === conversationId)
-      ensureConversationPresence(conversationId)
+      // Se a conversa não existe na lista, tentar carregar da API
+      if (!ensureConversationPresence(conversationId)) {
+        loadConversations().catch(err => console.error('Erro ao carregar conversas após nova mensagem:', err))
+      }
       addMessage(message)
     })
 
@@ -379,32 +377,6 @@ export const useConversationStore = defineStore('conversation', () => {
     })
   }
 
-  function createDemoConversation(id: string): Conversation {
-    const now = new Date().toISOString()
-    return {
-      id,
-      contactId: 'stub-contact',
-      contactName: 'Contato Demo',
-      serviceInstanceId: 'stub-instance',
-      serviceInstanceName: 'Instância Demo',
-      status: ConversationStatus.OPEN,
-      createdAt: now,
-      updatedAt: now,
-      unreadCount: 0,
-      messages: [createDemoMessage(id)]
-    }
-  }
-
-  function createDemoMessage(conversationId: string): Message {
-    return {
-      id: `stub-message-${conversationId}`,
-      conversationId,
-      content: 'Conversa demo sem backend.',
-      createdAt: new Date().toISOString(),
-      direction: 'OUTBOUND',
-      fromMe: true
-    }
-  }
 
   return {
     conversations,

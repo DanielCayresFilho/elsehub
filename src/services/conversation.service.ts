@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Conversation, PaginatedResponse } from '@/types'
+import type { Conversation } from '@/types'
 import { ConversationStatus } from '@/types'
 
 interface CreateConversationRequest {
@@ -19,16 +19,17 @@ export const conversationService = {
   /**
    * GET /api/conversations
    * Lista conversas com paginação
+   * Backend retorna array direto conforme documentação
    */
-  async getConversations(page = 1, limit = 10, status?: ConversationStatus): Promise<PaginatedResponse<Conversation>> {
-    const { data } = await api.get<PaginatedResponse<Conversation>>('/conversations', {
+  async getConversations(page = 1, limit = 10, status?: ConversationStatus): Promise<Conversation[]> {
+    const { data } = await api.get<Conversation[]>('/conversations', {
       params: {
         page,
         limit,
         ...(status && { status })
       }
     })
-    return data
+    return data || []
   },
 
   /**
@@ -59,19 +60,20 @@ export const conversationService = {
   },
 
   /**
-   * PATCH /api/conversations/:id/close
+   * POST /api/conversations/:id/close
    * Fecha uma conversa com motivo de tabulação
+   * Conforme documentação: POST (não PATCH)
    */
   async closeConversation(id: string, tabulationId: string): Promise<void> {
-    await api.patch(`/conversations/${id}/close`, { tabulationId })
+    await api.post(`/conversations/${id}/close`, { tabulationId })
   },
 
   /**
-   * GET /api/conversations/queued
+   * GET /api/conversations/queue
    * Lista conversas na fila (sem operador atribuído)
    */
   async getQueue(): Promise<Conversation[]> {
-    const { data } = await api.get<Conversation[]>('/conversations/queued')
+    const { data } = await api.get<Conversation[]>('/conversations/queue')
     return data
   }
 }

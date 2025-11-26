@@ -16,7 +16,7 @@ export const contactService = {
   /**
    * GET /api/contacts
    * Lista contatos com filtros e paginação
-   * Retorna array direto, não paginado
+   * Backend retorna array direto conforme documentação
    */
   async getContacts(page = 1, limit = 25, search?: string): Promise<Contact[]> {
     const { data } = await api.get<Contact[]>('/contacts', {
@@ -26,7 +26,7 @@ export const contactService = {
         ...(search && { search })
       }
     })
-    return data
+    return data || []
   },
 
   /**

@@ -9,7 +9,8 @@
     </div>
 
     <div class="card">
-      <table class="data-table">
+      <div v-if="loading" class="loading"></div>
+      <table v-else class="data-table">
         <thead>
           <tr>
             <th>Nome</th>
@@ -82,51 +83,51 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { User } from '@/types'
+import type { User, UserRole } from '@/types'
+import { userService } from '@/services/user.service'
 
 const users = ref<User[]>([])
+const loading = ref(false)
 const showModal = ref(false)
 const form = ref({
   name: '',
   email: '',
   password: '',
-  role: 'OPERATOR'
+  role: 'OPERATOR' as UserRole
 })
 
-const loadUsers = () => {
-  users.value = [
-    {
-      id: 'user-1',
-      name: 'Maria Oliveira',
-      email: 'maria@example.com',
-      role: 'ADMIN',
-      isActive: true,
-      isOnline: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
+const loadUsers = async () => {
+  loading.value = true
+  try {
+    users.value = await userService.getUsers(1, 100)
+  } catch (error) {
+    console.error('Erro ao carregar usuários:', error)
+    users.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
-const createUser = () => {
-  users.value.push({
-    id: `user-${Date.now()}`,
-    name: form.value.name,
-    email: form.value.email,
-    role: form.value.role as User['role'],
-    isActive: true,
-    isOnline: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  })
-  showModal.value = false
-  form.value = { name: '', email: '', password: '', role: 'OPERATOR' }
+const createUser = async () => {
+  try {
+    await userService.createUser(form.value)
+    showModal.value = false
+    form.value = { name: '', email: '', password: '', role: 'OPERATOR' }
+    await loadUsers()
+  } catch (error: any) {
+    console.error('Erro ao criar usuário:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao criar usuário')
+  }
 }
 
-const toggleActive = (user: User) => {
-  users.value = users.value.map(u =>
-    u.id === user.id ? { ...u, isActive: !u.isActive } : u
-  )
+const toggleActive = async (user: User) => {
+  try {
+    await userService.updateUser(user.id, { isActive: !user.isActive })
+    await loadUsers()
+  } catch (error: any) {
+    console.error('Erro ao atualizar usuário:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao atualizar usuário')
+  }
 }
 
 onMounted(() => {

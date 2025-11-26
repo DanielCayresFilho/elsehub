@@ -28,7 +28,7 @@
       >
         <div class="campaign-header">
           <h3>{{ campaign.name }}</h3>
-          <span :class="['status-badge', campaign.status.toLowerCase()]">
+          <span :class="['status-badge', getStatusClass(campaign.status)]">
             {{ getStatusText(campaign.status) }}
           </span>
         </div>
@@ -65,7 +65,7 @@
           </span>
           <div class="campaign-actions" @click.stop>
             <button 
-              v-if="campaign.status === 'DRAFT' || campaign.status === 'PAUSED'" 
+              v-if="campaign.status === 'PENDING' || campaign.status === 'PAUSED'" 
               @click="startCampaign(campaign.id)"
               class="btn-success btn-sm"
             >
@@ -89,44 +89,42 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { Campaign } from '@/types'
+import type { Campaign, CampaignStatus } from '@/types'
+import { campaignService } from '@/services/campaign.service'
 
 const campaigns = ref<Campaign[]>([])
 const loading = ref(true)
 
-const loadCampaigns = () => {
+const loadCampaigns = async () => {
   loading.value = true
-  campaigns.value = [
-    {
-      id: 'campaign-demo',
-      name: 'Campanha Demo',
-      status: 'DRAFT',
-      serviceInstanceId: 'instance-demo',
-      delaySeconds: 5,
-      totalContacts: 100,
-      sentCount: 10,
-      failedCount: 2,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    } as Campaign
-  ]
-  loading.value = false
+  try {
+    campaigns.value = await campaignService.getCampaigns()
+  } catch (error) {
+    console.error('Erro ao carregar campanhas:', error)
+    campaigns.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
-const startCampaign = (id: string) => {
-  campaigns.value = campaigns.value.map(campaign =>
-    campaign.id === id
-      ? { ...campaign, status: 'PROCESSING', updatedAt: new Date().toISOString() }
-      : campaign
-  )
+const startCampaign = async (id: string) => {
+  try {
+    const updated = await campaignService.startCampaign(id)
+    await loadCampaigns()
+  } catch (error: any) {
+    console.error('Erro ao iniciar campanha:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao iniciar campanha')
+  }
 }
 
-const pauseCampaign = (id: string) => {
-  campaigns.value = campaigns.value.map(campaign =>
-    campaign.id === id
-      ? { ...campaign, status: 'PAUSED', updatedAt: new Date().toISOString() }
-      : campaign
-  )
+const pauseCampaign = async (id: string) => {
+  try {
+    await campaignService.pauseCampaign(id)
+    await loadCampaigns()
+  } catch (error: any) {
+    console.error('Erro ao pausar campanha:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao pausar campanha')
+  }
 }
 
 const calculateProgress = (campaign: Campaign) => {
@@ -134,16 +132,26 @@ const calculateProgress = (campaign: Campaign) => {
   return Math.round((campaign.sentCount / campaign.totalContacts) * 100)
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    DRAFT: 'Rascunho',
-    SCHEDULED: 'Agendada',
+const getStatusText = (status: CampaignStatus) => {
+  const texts: Record<CampaignStatus, string> = {
+    PENDING: 'Pendente',
     PROCESSING: 'Processando',
     PAUSED: 'Pausada',
     COMPLETED: 'Concluída',
     FAILED: 'Falhou'
   }
   return texts[status] || status
+}
+
+const getStatusClass = (status: CampaignStatus) => {
+  const classes: Record<CampaignStatus, string> = {
+    PENDING: 'pending',
+    PROCESSING: 'processing',
+    PAUSED: 'paused',
+    COMPLETED: 'completed',
+    FAILED: 'failed'
+  }
+  return classes[status] || ''
 }
 
 const formatDate = (date: string) => {
@@ -206,14 +214,9 @@ onMounted(() => {
   font-size: 0.75rem;
   font-weight: 500;
 
-  &.draft {
+  &.pending {
     background: rgba($text-secondary-light, 0.1);
     color: $text-secondary-light;
-  }
-
-  &.scheduled {
-    background: rgba($info, 0.1);
-    color: $info;
   }
 
   &.processing {

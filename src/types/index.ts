@@ -12,8 +12,7 @@ export enum ConversationStatus {
 }
 
 export enum CampaignStatus {
-  DRAFT = 'DRAFT',
-  SCHEDULED = 'SCHEDULED',
+  PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
   PAUSED = 'PAUSED',
   COMPLETED = 'COMPLETED',
@@ -33,7 +32,8 @@ export interface User {
   role: UserRole
   isActive: boolean
   isOnline: boolean
-  lastConversationAssignedAt?: string
+  onlineSince?: string | null // Data/hora quando ficou online (conforme API)
+  lastConversationAssignedAt?: string | null // Data/hora da última conversa atribuída (conforme API)
   createdAt: string
   updatedAt: string
 }
@@ -115,9 +115,11 @@ export interface UpdateServiceInstanceRequest extends Partial<CreateServiceInsta
 }
 
 export interface QRCodeResponse {
-  base64?: string // QR Code em base64: "data:image/png;base64,..."
+  qrcode?: string // QR Code em base64 com prefixo data:image: "data:image/png;base64,..."
+  base64?: string // QR Code em base64 sem prefixo: "iVBORw0KGgoAAAANSUhEUgAA..."
   pairingCode?: string // Código de pareamento: "12345678"
   message?: string // Mensagem quando já conectada: "Instância já conectada"
+  instanceName?: string // Nome da instância
 }
 
 // Conversation Types
@@ -155,27 +157,27 @@ export interface Message {
   content: string
   serviceInstanceId?: string
   serviceInstanceName?: string
-  fromMe?: boolean // Se true, mensagem foi enviada pelo operador
-  direction?: 'INBOUND' | 'OUTBOUND' // INBOUND = recebida, OUTBOUND = enviada
-  senderId?: string // ID do operador (null se for do cliente)
-  sender?: User
-  timestamp?: string
-  createdAt: string
-  delivered?: boolean
-  read?: boolean
-  status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
-  externalId?: string // ID da mensagem na Evolution/Meta API
-  hasMedia?: boolean
-  mediaType?: 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'VIDEO' | 'STICKER' | string
-  mediaFileName?: string
-  mediaMimeType?: string
-  mediaSize?: number
-  mediaCaption?: string | null
-  mediaUrl?: string // URL original da mídia (Evolution/Meta)
-  mediaPublicUrl?: string // URL pública da mídia salva localmente (/media/messages/...)
-  mediaStoragePath?: string // Caminho relativo onde a mídia foi salva (storage/messages/...)
-  mediaDownloadPath?: string // Path para download via API (/api/messages/:id/media)
-  via?: 'INBOUND' | 'CAMPAIGN' | 'CHAT_MANUAL' // Como a mensagem foi enviada/recebida
+  fromMe?: boolean // Campo auxiliar do frontend (calculado baseado em direction e senderId)
+  direction?: 'INBOUND' | 'OUTBOUND' // INBOUND = recebida, OUTBOUND = enviada (conforme API)
+  senderId?: string | null // ID do operador (null se for do cliente) - conforme API
+  senderName?: string | null // Nome do operador (null se for do cliente) - conforme API
+  sender?: User // Campo auxiliar do frontend
+  timestamp?: string // Campo auxiliar do frontend (alias para createdAt)
+  createdAt: string // Conforme API
+  delivered?: boolean // Campo auxiliar do frontend (calculado baseado em status)
+  read?: boolean // Campo auxiliar do frontend (calculado baseado em status)
+  status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received' // Conforme API: 'sent' ou 'received'
+  externalId?: string // ID da mensagem na Evolution/Meta API - conforme API
+  hasMedia?: boolean // Conforme API
+  mediaType?: string | null // Conforme API
+  mediaFileName?: string | null // Conforme API
+  mediaMimeType?: string | null // Conforme API
+  mediaSize?: number | null // Conforme API
+  mediaCaption?: string | null // Conforme API
+  mediaStoragePath?: string | null // Conforme API
+  mediaPublicUrl?: string | null // Conforme API
+  mediaDownloadPath?: string | null // Conforme API
+  via?: 'INBOUND' | 'CAMPAIGN' | 'CHAT_MANUAL' // Conforme API
 }
 
 // Campaign Types
@@ -184,18 +186,25 @@ export interface Campaign {
   name: string
   status: CampaignStatus
   serviceInstanceId: string
+  serviceInstanceName?: string // Nome da instância (retornado pelo backend)
   serviceInstance?: ServiceInstance
   templateId?: string
+  templateName?: string // Nome do template (retornado pelo backend)
   template?: Template
+  supervisorId?: string // ID do supervisor que criou (retornado pelo backend)
+  supervisorName?: string // Nome do supervisor (retornado pelo backend)
+  csvPath?: string | null // Caminho do arquivo CSV (retornado pelo backend)
   delaySeconds: number
-  scheduledAt?: string
-  startedAt?: string
-  completedAt?: string
+  scheduledAt?: string | null
+  startedAt?: string | null
+  finishedAt?: string | null // Data de conclusão (conforme API, não completedAt)
+  completedAt?: string // Mantido para compatibilidade
   totalContacts: number
   sentCount: number
   failedCount: number
-  createdAt: string
-  updatedAt: string
+  pendingCount?: number // Contatos pendentes (retornado pelo backend)
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface CreateCampaignRequest {
@@ -211,9 +220,13 @@ export interface Template {
   id: string
   name: string
   body: string
+  metaTemplateId?: string | null // ID do template na Meta (conforme API)
+  language?: string | null // Idioma do template (ex: pt_BR) (conforme API)
+  variables?: Record<string, any> | null // Estrutura de variáveis (conforme API)
   serviceInstanceId: string
-  createdAt: string
-  updatedAt: string
+  serviceInstanceName?: string // Nome da instância (retornado pelo backend)
+  createdAt?: string
+  updatedAt?: string
 }
 
 // Tabulation Types
@@ -227,20 +240,30 @@ export interface Tabulation {
 // Report Types
 export interface Statistics {
   totalConversations: number
-  activeConversations: number
+  openConversations: number // Conforme API (não activeConversations)
   closedConversations: number
   totalMessages: number
-  averageResponseTime: number
-  responseRate: number
+  inboundMessages: number // Conforme API
+  outboundMessages: number // Conforme API
+  avgResponseTime: number // Conforme API (não averageResponseTime)
+  avgConversationDuration: number // Conforme API
+  // Campos auxiliares do frontend (mantidos para compatibilidade)
+  activeConversations?: number // Alias para openConversations
+  averageResponseTime?: number // Alias para avgResponseTime
+  responseRate?: number // Calculado no frontend
 }
 
 export interface OperatorPerformance {
   operatorId: string
   operatorName: string
   totalConversations: number
-  averageResponseTime: number
+  closedConversations: number // Conforme API
+  avgResponseTime: number // Conforme API (não averageResponseTime)
+  avgConversationDuration: number // Conforme API
   totalMessages: number
-  satisfaction?: number
+  // Campos auxiliares do frontend (mantidos para compatibilidade)
+  averageResponseTime?: number // Alias para avgResponseTime
+  satisfaction?: number // Campo opcional (não na API)
 }
 
 // API Response Types

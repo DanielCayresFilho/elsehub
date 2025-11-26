@@ -9,7 +9,8 @@
     </div>
 
     <div class="card">
-      <table class="data-table">
+      <div v-if="loading" class="loading"></div>
+      <table v-else class="data-table">
         <thead>
           <tr>
             <th>Nome</th>
@@ -56,21 +57,24 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { Tabulation } from '@/types'
+import { tabulationService } from '@/services/tabulation.service'
 
 const tabulations = ref<Tabulation[]>([])
+const loading = ref(false)
 const showModal = ref(false)
 const editingTabulation = ref<Tabulation | null>(null)
 const form = ref({ name: '' })
 
-const loadTabulations = () => {
-  tabulations.value = [
-    {
-      id: 'tab-1',
-      name: 'Atendimento concluído',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
+const loadTabulations = async () => {
+  loading.value = true
+  try {
+    tabulations.value = await tabulationService.getTabulations()
+  } catch (error) {
+    console.error('Erro ao carregar tabulações:', error)
+    tabulations.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 const openCreateModal = () => {
@@ -90,27 +94,30 @@ const closeModal = () => {
   editingTabulation.value = null
 }
 
-const saveTabulation = () => {
-  if (editingTabulation.value) {
-    tabulations.value = tabulations.value.map(tabulation =>
-      tabulation.id === editingTabulation.value?.id
-        ? { ...tabulation, name: form.value.name, updatedAt: new Date().toISOString() }
-        : tabulation
-    )
-  } else {
-    tabulations.value.unshift({
-      id: `tab-${Date.now()}`,
-      name: form.value.name,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    })
+const saveTabulation = async () => {
+  try {
+    if (editingTabulation.value) {
+      await tabulationService.updateTabulation(editingTabulation.value.id, form.value)
+    } else {
+      await tabulationService.createTabulation(form.value)
+    }
+    closeModal()
+    await loadTabulations()
+  } catch (error: any) {
+    console.error('Erro ao salvar tabulação:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao salvar tabulação')
   }
-  closeModal()
 }
 
-const deleteTabulation = (id: string) => {
+const deleteTabulation = async (id: string) => {
   if (!confirm('Tem certeza que deseja excluir esta tabulação?')) return
-  tabulations.value = tabulations.value.filter(tabulation => tabulation.id !== id)
+  try {
+    await tabulationService.deleteTabulation(id)
+    await loadTabulations()
+  } catch (error: any) {
+    console.error('Erro ao deletar tabulação:', error)
+    alert(error.response?.data?.message || error.message || 'Erro ao deletar tabulação')
+  }
 }
 
 const formatDate = (date: string) => {

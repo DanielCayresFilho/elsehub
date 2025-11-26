@@ -149,7 +149,7 @@ const loadData = async () => {
       templateService.getTemplates()
     ])
     instances.value = instancesData.filter(i => i.isActive)
-    templates.value = templatesData.data
+    templates.value = templatesData // getTemplates retorna array direto, não objeto com data
   } catch (err) {
     console.error('Erro ao carregar dados:', err)
     alert('Erro ao carregar dados')

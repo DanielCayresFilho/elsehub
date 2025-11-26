@@ -103,6 +103,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { Conversation } from '@/types'
+import { reportService } from '@/services/report.service'
 
 const conversations = ref<Conversation[]>([])
 const loading = ref(true)
@@ -115,26 +116,23 @@ const filters = ref({
   search: ''
 })
 
-const loadHistory = () => {
+const loadHistory = async () => {
   loading.value = true
-  conversations.value = [
-    {
-      id: `history-${currentPage.value}`,
-      contactId: 'contact-demo',
-      contactName: 'Cliente Demo',
-      contactPhone: '+55 (11) 99999-9999',
-      serviceInstanceId: 'instance-demo',
-      status: 'CLOSED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      closedAt: new Date().toISOString(),
-      lastMessageAt: new Date().toISOString(),
-      lastMessagePreview: 'Atendimento encerrado.',
-      lastMessageDirection: 'OUTBOUND'
-    } as Conversation
-  ]
-  totalPages.value = 1
-  loading.value = false
+  try {
+    const apiFilters: any = {}
+    if (filters.value.startDate) apiFilters.startDate = filters.value.startDate
+    if (filters.value.endDate) apiFilters.endDate = filters.value.endDate
+    if (filters.value.search) apiFilters.search = filters.value.search
+
+    const data = await reportService.getFinishedConversations(apiFilters)
+    conversations.value = data
+    totalPages.value = 1 // Relatórios não são paginados
+  } catch (error) {
+    console.error('Erro ao carregar histórico:', error)
+    conversations.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 const clearFilters = () => {

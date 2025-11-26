@@ -635,7 +635,7 @@ const loadContacts = async () => {
   loadingContacts.value = true
   try {
     const response = await contactService.getContacts(1, 100)
-    contacts.value = response.data
+    contacts.value = response
   } catch (error) {
     console.error('Erro ao carregar contatos:', error)
     alert('Erro ao carregar contatos')
